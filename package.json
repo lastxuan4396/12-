@@ -1,0 +1,27 @@
+{
+  "name": "repair-12min-render",
+  "version": "1.0.0",
+  "description": "这是一个纯静态网页项目（单文件 `index.html`），用于部署到 Render。",
+  "main": "index.js",
+  "scripts": {
+    "smoke": "node scripts/smoke-check.js",
+    "test:browser": "node scripts/playwright-smoke.js",
+    "test:local": "./scripts/run-regression.sh",
+    "test": "npm run test:local"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lastxuan4396/ohcard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/lastxuan4396/ohcard/issues"
+  },
+  "homepage": "https://github.com/lastxuan4396/ohcard#readme",
+  "devDependencies": {
+    "playwright": "^1.58.2"
+  }
+}

@@ -12,6 +12,21 @@
 node scripts/smoke-check.js
 ```
 
+## 浏览器自动回归（已内置）
+
+首次准备：
+
+```bash
+npm install
+npx playwright install chromium
+```
+
+执行一键本地回归（含结构检查 + Playwright 自动点流程 + 本地部署校验）：
+
+```bash
+npm test
+```
+
 ## 线上部署校验
 
 ```bash
