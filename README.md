@@ -6,6 +6,20 @@
 
 直接打开 `index.html` 即可。
 
+## 本地回归检查
+
+```bash
+node scripts/smoke-check.js
+```
+
+## 线上部署校验
+
+```bash
+./scripts/verify-deploy.sh
+# 或指定 URL
+./scripts/verify-deploy.sh https://repair-12min.onrender.com
+```
+
 ## Render 部署
 
 1. 将本目录推送到 GitHub 仓库。

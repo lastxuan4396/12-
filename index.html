@@ -397,6 +397,16 @@
         margin-top: 8px;
       }
 
+      .privacy-options {
+        margin-top: 8px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .privacy-passphrase {
+        margin-top: 8px;
+      }
+
       .resume-box {
         border: 1px dashed rgba(19, 111, 99, 0.38);
         border-radius: 12px;
@@ -469,6 +479,37 @@
         color: var(--muted);
       }
 
+      .rewrite-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .rewrite-item {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: #fff;
+        display: grid;
+        gap: 8px;
+      }
+
+      .rewrite-item .actions {
+        justify-content: flex-end;
+      }
+
+      .rewrite-item pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: 'Noto Sans SC', sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .muted.alert {
+        color: var(--danger);
+      }
+
       @media (max-width: 940px) {
         .grid,
         .double-col {
@@ -477,6 +518,12 @@
 
         .meta {
           justify-items: start;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .actions > button {
+          flex: 1 1 calc(50% - 6px);
         }
       }
     </style>
@@ -537,13 +584,30 @@
                     <input id="privacyModeToggle" type="checkbox" />
                     开启隐私模式（不保存本轮到本地）
                   </label>
+                  <div class="privacy-options">
+                    <label class="switch-line">
+                      <input id="autoClearDraftToggle" type="checkbox" />
+                      会话结束自动清理草稿
+                    </label>
+                    <label class="switch-line">
+                      <input id="autoClearHistoryToggle" type="checkbox" />
+                      会话结束自动清空历史
+                    </label>
+                  </div>
                   <p id="privacyHint" class="muted" style="margin: 6px 0 0">
                     当前会把已完成会话保存到本地浏览器。
                   </p>
+                  <div class="form-row privacy-passphrase">
+                    <label for="archivePassphrase">存档口令（用于加密导出 / 解密导入）</label>
+                    <input id="archivePassphrase" type="password" placeholder="留空则明文导出" autocomplete="off" />
+                    <small id="importHint" class="muted"></small>
+                  </div>
                   <div class="actions privacy-actions">
+                    <button id="importBtn" class="btn-plain" type="button">导入存档</button>
                     <button id="exportBtn" class="btn-plain" type="button">导出存档</button>
                     <button id="exportClearBtn" class="btn-plain" type="button">导出后清空</button>
                     <button id="clearHistoryBtn" class="btn-danger" type="button">清空历史</button>
+                    <input id="importFileInput" type="file" accept=".json,application/json" class="hidden" />
                   </div>
                 </div>
               </div>
@@ -666,6 +730,11 @@
                   <small id="copyShareHint" class="muted"></small>
                 </div>
               </div>
+              <div class="form-row">
+                <label>低分步骤改写建议</label>
+                <div id="resultRewriteList" class="rewrite-list"></div>
+                <small id="rewriteCopyHint" class="muted"></small>
+              </div>
               <div class="actions" style="margin-top: 12px">
                 <button id="restartBtn" class="btn-main">再来一轮</button>
                 <button id="backStartBtn" class="btn-plain">回到首页</button>
@@ -688,6 +757,8 @@
       const TOTAL_SECONDS = 12 * 60;
       const FINISH_CONFIRM_WINDOW_MS = 3000;
       const SCORE_OPTIONS = [1, 2, 3, 4, 5];
+      const ARCHIVE_VERSION = 2;
+      const PBKDF2_ITERATIONS = 120000;
 
       const FEELINGS = ['委屈', '生气', '焦虑', '失落', '害怕', '内疚', '沮丧', '孤单', '疲惫', '被忽视'];
       const NEEDS = ['被理解', '被尊重', '安全感', '陪伴', '信任', '空间', '确定性', '支持', '被看见', '公平'];
@@ -820,6 +891,8 @@
         resultPeaceLine: document.getElementById('resultPeaceLine'),
         resultTonight: document.getElementById('resultTonight'),
         resultQualityInsight: document.getElementById('resultQualityInsight'),
+        resultRewriteList: document.getElementById('resultRewriteList'),
+        rewriteCopyHint: document.getElementById('rewriteCopyHint'),
         shareCardText: document.getElementById('shareCardText'),
         copyShareBtn: document.getElementById('copyShareBtn'),
         copyShareHint: document.getElementById('copyShareHint'),
@@ -827,7 +900,13 @@
         backStartBtn: document.getElementById('backStartBtn'),
         resultHistoryList: document.getElementById('resultHistoryList'),
         privacyModeToggle: document.getElementById('privacyModeToggle'),
+        autoClearDraftToggle: document.getElementById('autoClearDraftToggle'),
+        autoClearHistoryToggle: document.getElementById('autoClearHistoryToggle'),
         privacyHint: document.getElementById('privacyHint'),
+        archivePassphrase: document.getElementById('archivePassphrase'),
+        importHint: document.getElementById('importHint'),
+        importBtn: document.getElementById('importBtn'),
+        importFileInput: document.getElementById('importFileInput'),
         exportBtn: document.getElementById('exportBtn'),
         exportClearBtn: document.getElementById('exportClearBtn'),
         clearHistoryBtn: document.getElementById('clearHistoryBtn'),
@@ -842,9 +921,12 @@
       let session = null;
       let renderedStepIndex = -1;
       let finishConfirmUntil = 0;
+      let rewriteSuggestionsCache = [];
       const settings = loadSettings();
       let history = loadHistory();
       let pendingResume = loadActiveSession();
+      const textEncoder = new TextEncoder();
+      const textDecoder = new TextDecoder();
 
       function nowMs() {
         return Date.now();
@@ -901,6 +983,78 @@
         const base = STEPS[stepIndex].desc;
         const note = getTemplate(conflictType).stepNotes[stepIndex];
         return note ? `${base} ${note}` : base;
+      }
+
+      function uint8ToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          const slice = bytes.subarray(i, i + chunk);
+          binary += String.fromCharCode(...slice);
+        }
+        return btoa(binary);
+      }
+
+      function base64ToUint8(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+      }
+
+      async function deriveArchiveKey(passphrase, salt) {
+        const material = await crypto.subtle.importKey('raw', textEncoder.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        return crypto.subtle.deriveKey(
+          {
+            name: 'PBKDF2',
+            salt,
+            iterations: PBKDF2_ITERATIONS,
+            hash: 'SHA-256'
+          },
+          material,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        );
+      }
+
+      async function encryptArchivePayload(payload, passphrase) {
+        if (!crypto?.subtle) throw new Error('当前浏览器不支持加密导出。');
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const key = await deriveArchiveKey(passphrase, salt);
+        const plainBytes = textEncoder.encode(JSON.stringify(payload));
+        const encryptedBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes);
+        return {
+          version: ARCHIVE_VERSION,
+          encrypted: true,
+          kdf: 'PBKDF2-SHA256',
+          iter: PBKDF2_ITERATIONS,
+          salt: uint8ToBase64(salt),
+          iv: uint8ToBase64(iv),
+          data: uint8ToBase64(new Uint8Array(encryptedBuffer))
+        };
+      }
+
+      async function decryptArchivePayload(payload, passphrase) {
+        if (!crypto?.subtle) throw new Error('当前浏览器不支持加密解密。');
+        const salt = base64ToUint8(payload.salt || '');
+        const iv = base64ToUint8(payload.iv || '');
+        const data = base64ToUint8(payload.data || '');
+        const key = await deriveArchiveKey(passphrase, salt);
+        const plainBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return JSON.parse(textDecoder.decode(plainBuffer));
+      }
+
+      function getArchivePassphrase() {
+        return (els.archivePassphrase.value || '').trim();
+      }
+
+      function showImportHint(message, isError = false) {
+        els.importHint.textContent = message || '';
+        els.importHint.classList.toggle('alert', Boolean(isError));
       }
 
       function createSession(override = {}) {
@@ -991,9 +1145,11 @@
       function updatePrivacyHint() {
         const enabled = Boolean(settings.privacyMode);
         els.privacyModeToggle.checked = enabled;
+        els.autoClearDraftToggle.checked = Boolean(settings.autoClearDraftOnFinish);
+        els.autoClearHistoryToggle.checked = Boolean(settings.autoClearHistoryOnFinish);
         els.privacyHint.textContent = enabled
           ? '隐私模式开启：不会保存本轮记录，也不会恢复未完成会话。'
-          : '当前会把已完成会话保存到本地浏览器。';
+          : `当前会把已完成会话保存到本地浏览器。结束后自动清理草稿：${settings.autoClearDraftOnFinish ? '开' : '关'}；自动清空历史：${settings.autoClearHistoryOnFinish ? '开' : '关'}。`;
       }
 
       function renderResumeCard() {
@@ -1225,10 +1381,20 @@
         if (!session.tonightAction) session.tonightAction = suggestTonightAction();
 
         localStorage.removeItem(ACTIVE_SESSION_KEY);
-        if (!session.privacyMode) {
+        pendingResume = null;
+
+        if (settings.autoClearHistoryOnFinish) {
+          history = [];
+          localStorage.removeItem(STORAGE_KEY);
+          renderHistoryLists();
+        } else if (!session.privacyMode) {
           saveToHistory(session);
         } else {
           renderHistoryLists();
+        }
+
+        if (settings.autoClearDraftOnFinish) {
+          localStorage.removeItem(ACTIVE_SESSION_KEY);
         }
         renderResult();
         showScreen('result');
@@ -1304,6 +1470,72 @@
           .map((x) => STEPS[x.step]?.title || `Step ${x.step}`)
           .join('、');
         return `本轮平均 ${avg} 分。薄弱环节：${topLow}。下轮建议在这两步里先说事实，再用一句“我听到的是...”确认。`;
+      }
+
+      function compactLine(value, fallback) {
+        const text = String(value || '').trim();
+        if (!text) return fallback;
+        return text.length > 44 ? `${text.slice(0, 44)}...` : text;
+      }
+
+      function buildRewriteSuggestions(targetSession) {
+        const lowSteps = Object.entries(targetSession.stepScores || {})
+          .map(([step, score]) => ({ step: Number(step), score: Number(score) }))
+          .filter((x) => x.step > 0 && x.score > 0 && x.score <= 2)
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 3);
+
+        if (!lowSteps.length) return [];
+        const { a, b } = targetSession.names;
+        const suggestions = [];
+
+        lowSteps.forEach(({ step, score }) => {
+          let title = `${STEPS[step]?.title || `Step ${step}`}（${score} 分）`;
+          let text = '';
+
+          if (step === 1) {
+            text = `建议改写（${a}事实）\n原句：${compactLine(targetSession.factA, '未填写')}\n改写：当时在[具体时间]发生了[具体行为]，我感到[感受]，我希望我们先确认事实再讨论感受。`;
+          } else if (step === 2) {
+            text = `建议改写（${b}复述）\n原句：${compactLine(targetSession.reflectB, '未填写')}\n改写：我听到你在意的是[核心点]，你希望[具体期待]，我理解得对吗？`;
+          } else if (step === 3) {
+            text = `建议改写（${b}事实）\n原句：${compactLine(targetSession.factB, '未填写')}\n改写：在[时间]我做了[行为]，结果是[影响]，不是想忽视你。我接下来会[补救动作]。`;
+          } else if (step === 4) {
+            text = `建议改写（${a}复述）\n原句：${compactLine(targetSession.reflectA, '未填写')}\n改写：我听到你的意思是[对方难处]，你的重点需求是[需求]，我先确认再回应。`;
+          } else if (step === 5) {
+            text = `建议改写（感受与需要）\n${a}：我现在感到[感受]，我真正需要的是[需要]。\n${b}：我现在感到[感受]，我真正需要的是[需要]。`;
+          } else if (step === 6) {
+            text = `建议改写（双向请求）\n${a}：当[场景]发生时，我希望你[具体动作]，如果暂时做不到请[替代动作]。\n${b}：当[场景]发生时，我希望你[具体动作]，我会先[承诺动作]。`;
+          } else if (step === 7) {
+            text = `建议改写（收尾）\n和好一句话：我们先把这次对齐好，不再扩大冲突。\n今晚行动：今晚[时间]前完成[动作]，明天用 5 分钟复盘。`;
+          }
+
+          if (text) suggestions.push({ title, text });
+        });
+
+        return suggestions;
+      }
+
+      function renderRewriteSuggestions(targetSession) {
+        rewriteSuggestionsCache = buildRewriteSuggestions(targetSession);
+        els.rewriteCopyHint.textContent = '';
+        if (!rewriteSuggestionsCache.length) {
+          els.resultRewriteList.innerHTML = '<div class="result-card">本轮低分步骤较少，继续保持。若想强化，可优先打磨“复述”与“请求”两步。</div>';
+          return;
+        }
+
+        els.resultRewriteList.innerHTML = rewriteSuggestionsCache
+          .map(
+            (item, index) => `
+              <div class="rewrite-item">
+                <strong>${escapeHtml(item.title)}</strong>
+                <pre>${escapeHtml(item.text)}</pre>
+                <div class="actions">
+                  <button class="btn-plain" type="button" data-rewrite-index="${index}">复制建议</button>
+                </div>
+              </div>
+            `
+          )
+          .join('');
       }
 
       function buildShareCard(targetSession) {
@@ -1452,6 +1684,7 @@
         els.resultPeaceLine.textContent = session.peaceLine || '-';
         els.resultTonight.textContent = session.tonightAction || '-';
         els.resultQualityInsight.textContent = buildQualityInsight(session);
+        renderRewriteSuggestions(session);
         els.shareCardText.value = buildShareCard(session);
         els.copyShareHint.textContent = '';
         renderHistoryLists();
@@ -1469,7 +1702,11 @@
 
       function loadSettings() {
         const settingsRaw = loadJson(SETTINGS_KEY, {});
-        return { privacyMode: Boolean(settingsRaw.privacyMode) };
+        return {
+          privacyMode: Boolean(settingsRaw.privacyMode),
+          autoClearDraftOnFinish: Boolean(settingsRaw.autoClearDraftOnFinish),
+          autoClearHistoryOnFinish: Boolean(settingsRaw.autoClearHistoryOnFinish)
+        };
       }
 
       function saveSettings() {
@@ -1487,25 +1724,31 @@
       }
 
       function toHistoryRecord(item) {
+        const startedAt = item.startedAt || new Date().toISOString();
+        const endedAt = item.endedAt || startedAt;
+        const names = {
+          a: (item.names?.a || '我').trim() || '我',
+          b: (item.names?.b || '你').trim() || '你'
+        };
         return {
-          id: item.id,
-          startedAt: item.startedAt,
-          endedAt: item.endedAt,
-          status: item.status,
-          names: item.names,
+          id: item.id || `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+          startedAt,
+          endedAt,
+          status: item.status === 'done' ? 'done' : 'aborted',
+          names,
           conflictType: item.conflictType || 'general',
-          factA: item.factA,
-          factB: item.factB,
-          reflectA: item.reflectA,
-          reflectB: item.reflectB,
-          feelingsA: item.feelingsA,
-          feelingsB: item.feelingsB,
-          needsA: item.needsA,
-          needsB: item.needsB,
-          requestA: item.requestA,
-          requestB: item.requestB,
-          peaceLine: item.peaceLine,
-          tonightAction: item.tonightAction,
+          factA: item.factA || '',
+          factB: item.factB || '',
+          reflectA: item.reflectA || '',
+          reflectB: item.reflectB || '',
+          feelingsA: Array.isArray(item.feelingsA) ? item.feelingsA : [],
+          feelingsB: Array.isArray(item.feelingsB) ? item.feelingsB : [],
+          needsA: Array.isArray(item.needsA) ? item.needsA : [],
+          needsB: Array.isArray(item.needsB) ? item.needsB : [],
+          requestA: item.requestA || '',
+          requestB: item.requestB || '',
+          peaceLine: item.peaceLine || '',
+          tonightAction: item.tonightAction || '',
           stepScores: item.stepScores || {}
         };
       }
@@ -1528,13 +1771,15 @@
         });
       }
 
-      function aggregateTop(records, field, count = 3) {
+      function aggregateTopByFields(records, fields, count = 3) {
         const map = {};
         records.forEach((record) => {
-          const values = Array.isArray(record[field]) ? record[field] : [];
-          values.forEach((v) => {
-            if (!v) return;
-            map[v] = (map[v] || 0) + 1;
+          fields.forEach((field) => {
+            const values = Array.isArray(record[field]) ? record[field] : [];
+            values.forEach((v) => {
+              if (!v) return;
+              map[v] = (map[v] || 0) + 1;
+            });
           });
         });
         return Object.entries(map)
@@ -1542,6 +1787,52 @@
           .slice(0, count)
           .map(([label, n]) => `${label}(${n})`)
           .join('、');
+      }
+
+      function getRecordTimestamp(record) {
+        const iso = record.endedAt || record.startedAt;
+        const ts = new Date(iso).getTime();
+        return Number.isFinite(ts) ? ts : 0;
+      }
+
+      function pickTopConflict(records) {
+        const conflictMap = {};
+        records.forEach((r) => {
+          const key = r.conflictType || 'general';
+          conflictMap[key] = (conflictMap[key] || 0) + 1;
+        });
+        const topConflict = Object.entries(conflictMap).sort((a, b) => b[1] - a[1])[0];
+        return topConflict ? getTemplateLabel(topConflict[0]) : '-';
+      }
+
+      function summarizeWindow(records) {
+        const total = records.length;
+        const done = records.filter((x) => x.status === 'done').length;
+        const completionRate = total ? Math.round((done / total) * 100) : 0;
+        const avgScores = records
+          .map((r) => getAverageScore(r.stepScores))
+          .filter((x) => Number.isFinite(x) && x > 0);
+        const avgScore = avgScores.length
+          ? Number((avgScores.reduce((a, b) => a + b, 0) / avgScores.length).toFixed(1))
+          : 0;
+        return {
+          total,
+          completionRate,
+          avgScore,
+          topConflictLabel: pickTopConflict(records)
+        };
+      }
+
+      function formatTrend(current, previous, digits = 0, suffix = '') {
+        if (previous === null) {
+          return `${current.toFixed(digits)}${suffix}（无上期数据）`;
+        }
+        const delta = Number((current - previous).toFixed(digits));
+        if (delta === 0) {
+          return `${current.toFixed(digits)}${suffix}（较上个7天持平）`;
+        }
+        const sign = delta > 0 ? '+' : '';
+        return `${current.toFixed(digits)}${suffix}（${sign}${delta.toFixed(digits)}${suffix}）`;
       }
 
       function computeAnalytics(records) {
@@ -1557,12 +1848,17 @@
           ? Number((avgScores.reduce((a, b) => a + b, 0) / avgScores.length).toFixed(1))
           : 0;
 
-        const conflictMap = {};
-        records.forEach((r) => {
-          const key = r.conflictType || 'general';
-          conflictMap[key] = (conflictMap[key] || 0) + 1;
+        const now = nowMs();
+        const dayMs = 24 * 60 * 60 * 1000;
+        const currentStart = now - dayMs * 7;
+        const previousStart = now - dayMs * 14;
+        const currentWindow = records.filter((r) => getRecordTimestamp(r) >= currentStart);
+        const previousWindow = records.filter((r) => {
+          const ts = getRecordTimestamp(r);
+          return ts >= previousStart && ts < currentStart;
         });
-        const topConflict = Object.entries(conflictMap).sort((a, b) => b[1] - a[1])[0];
+        const summary7 = summarizeWindow(currentWindow);
+        const summaryPrev = summarizeWindow(previousWindow);
 
         return {
           total,
@@ -1570,9 +1866,12 @@
           aborted,
           completionRate,
           avgScore,
-          topConflictLabel: topConflict ? getTemplateLabel(topConflict[0]) : '-',
-          topFeelings: aggregateTop(records, 'feelingsA') || '-',
-          topNeeds: aggregateTop(records, 'needsA') || '-'
+          topConflictLabel: pickTopConflict(records),
+          topFeelings: aggregateTopByFields(records, ['feelingsA', 'feelingsB']) || '-',
+          topNeeds: aggregateTopByFields(records, ['needsA', 'needsB']) || '-',
+          trend7Completion: formatTrend(summary7.completionRate, summaryPrev.total ? summaryPrev.completionRate : null, 0, '%'),
+          trend7Score: formatTrend(summary7.avgScore, summaryPrev.total ? summaryPrev.avgScore : null, 1, '分'),
+          trend7Conflict: summary7.topConflictLabel
         };
       }
 
@@ -1590,7 +1889,13 @@
             <div class="analytics-item"><strong>${a.avgScore || '-'}</strong><small>平均质量分</small></div>
             <div class="analytics-item"><strong>${escapeHtml(a.topConflictLabel)}</strong><small>常见场景</small></div>
           </div>
-          <small>高频感受：${escapeHtml(a.topFeelings)}<br />高频需要：${escapeHtml(a.topNeeds)}</small>
+          <small>
+            近7天完成率：${escapeHtml(a.trend7Completion)}<br />
+            近7天平均分：${escapeHtml(a.trend7Score)}<br />
+            近7天高频场景：${escapeHtml(a.trend7Conflict)}<br />
+            高频感受：${escapeHtml(a.topFeelings)}<br />
+            高频需要：${escapeHtml(a.topNeeds)}
+          </small>
         `;
       }
 
@@ -1635,16 +1940,40 @@
         renderHistoryLists();
       }
 
-      function exportHistory(clearAfterExport = false) {
+      function mergeHistoryRecords(newItems) {
+        const map = new Map();
+        [...newItems, ...history].forEach((item) => {
+          const record = toHistoryRecord(item);
+          if (!map.has(record.id)) {
+            map.set(record.id, record);
+          }
+        });
+        history = [...map.values()]
+          .sort((a, b) => getRecordTimestamp(b) - getRecordTimestamp(a))
+          .slice(0, 50);
+      }
+
+      function normalizeImportedPayload(raw) {
+        if (Array.isArray(raw)) return raw;
+        if (raw && Array.isArray(raw.items)) return raw.items;
+        throw new Error('文件格式不正确，需包含 items 数组。');
+      }
+
+      async function exportHistory(clearAfterExport = false) {
         if (!history.length) {
           window.alert('暂无存档可导出。');
-          return;
+          return false;
         }
-        const payload = {
+        showImportHint('');
+        const archiveData = {
           exportedAt: new Date().toISOString(),
           count: history.length,
           items: history
         };
+        const passphrase = getArchivePassphrase();
+        const payload = passphrase
+          ? await encryptArchivePayload(archiveData, passphrase)
+          : { ...archiveData, encrypted: false, version: ARCHIVE_VERSION };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const anchor = document.createElement('a');
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -1658,6 +1987,36 @@
         if (clearAfterExport) {
           clearHistory(true);
         }
+        return true;
+      }
+
+      async function importHistoryFromFile(file) {
+        if (!file) return;
+        const text = await file.text();
+        let payload;
+        try {
+          payload = JSON.parse(text);
+        } catch (err) {
+          throw new Error('导入失败：文件不是有效 JSON。');
+        }
+
+        if (payload?.encrypted) {
+          const passphrase = getArchivePassphrase();
+          if (!passphrase) {
+            throw new Error('该文件已加密，请先填写存档口令。');
+          }
+          try {
+            payload = await decryptArchivePayload(payload, passphrase);
+          } catch (err) {
+            throw new Error('口令错误或文件已损坏，无法解密。');
+          }
+        }
+
+        const importedItems = normalizeImportedPayload(payload);
+        mergeHistoryRecords(importedItems);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        renderHistoryLists();
+        showImportHint(`导入成功：新增 ${importedItems.length} 条，当前共 ${history.length} 条。`);
       }
 
       function startFlow(mode = 'new') {
@@ -1730,18 +2089,40 @@
         finishSession('aborted');
       }
 
+      async function copyText(text) {
+        if (!text) return false;
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (err) {
+          const hidden = document.createElement('textarea');
+          hidden.value = text;
+          hidden.setAttribute('readonly', 'readonly');
+          hidden.style.position = 'absolute';
+          hidden.style.left = '-9999px';
+          document.body.appendChild(hidden);
+          hidden.select();
+          const ok = document.execCommand('copy');
+          hidden.remove();
+          return ok;
+        }
+      }
+
       async function copyShareCard() {
         const text = els.shareCardText.value.trim();
         if (!text) return;
-        try {
-          await navigator.clipboard.writeText(text);
-          els.copyShareHint.textContent = '已复制';
-        } catch (err) {
-          els.shareCardText.focus();
-          els.shareCardText.select();
-          const ok = document.execCommand('copy');
-          els.copyShareHint.textContent = ok ? '已复制' : '复制失败，请手动复制';
-        }
+        const ok = await copyText(text);
+        els.copyShareHint.textContent = ok ? '已复制' : '复制失败，请手动复制';
+      }
+
+      async function handleRewriteCopy(event) {
+        const button = event.target.closest('[data-rewrite-index]');
+        if (!button) return;
+        const idx = Number(button.dataset.rewriteIndex);
+        const payload = rewriteSuggestionsCache[idx]?.text || '';
+        if (!payload) return;
+        const ok = await copyText(payload);
+        els.rewriteCopyHint.textContent = ok ? '改写建议已复制' : '复制失败，请手动选择内容复制';
       }
 
       function handleSessionHotkeys(event) {
@@ -1777,6 +2158,7 @@
       els.restartBtn.addEventListener('click', () => startFlow('new'));
       els.backStartBtn.addEventListener('click', closeSessionToStart);
       els.copyShareBtn.addEventListener('click', copyShareCard);
+      els.resultRewriteList.addEventListener('click', handleRewriteCopy);
       els.conflictType.addEventListener('change', updateConflictHint);
       els.privacyModeToggle.addEventListener('change', (event) => {
         settings.privacyMode = Boolean(event.target.checked);
@@ -1788,9 +2170,57 @@
         }
         renderResumeCard();
       });
+      els.autoClearDraftToggle.addEventListener('change', (event) => {
+        settings.autoClearDraftOnFinish = Boolean(event.target.checked);
+        saveSettings();
+        updatePrivacyHint();
+      });
+      els.autoClearHistoryToggle.addEventListener('change', (event) => {
+        settings.autoClearHistoryOnFinish = Boolean(event.target.checked);
+        saveSettings();
+        updatePrivacyHint();
+      });
+      els.importBtn.addEventListener('click', () => {
+        showImportHint('');
+        els.importFileInput.click();
+      });
+      els.importFileInput.addEventListener('change', async (event) => {
+        const file = event.target.files && event.target.files[0];
+        event.target.value = '';
+        if (!file) return;
+        try {
+          await importHistoryFromFile(file);
+        } catch (err) {
+          showImportHint(err.message || '导入失败，请检查文件。', true);
+        }
+      });
       els.clearHistoryBtn.addEventListener('click', () => clearHistory(false));
-      els.exportBtn.addEventListener('click', () => exportHistory(false));
-      els.exportClearBtn.addEventListener('click', () => exportHistory(true));
+      els.exportBtn.addEventListener('click', async () => {
+        try {
+          const ok = await exportHistory(false);
+          if (!ok) return;
+          if (getArchivePassphrase()) {
+            showImportHint('已导出加密存档。');
+          } else {
+            showImportHint('已导出明文存档。');
+          }
+        } catch (err) {
+          showImportHint(err.message || '导出失败，请稍后再试。', true);
+        }
+      });
+      els.exportClearBtn.addEventListener('click', async () => {
+        try {
+          const ok = await exportHistory(true);
+          if (!ok) return;
+          if (getArchivePassphrase()) {
+            showImportHint('已导出加密存档并清空历史。');
+          } else {
+            showImportHint('已导出明文存档并清空历史。');
+          }
+        } catch (err) {
+          showImportHint(err.message || '导出失败，请稍后再试。', true);
+        }
+      });
       document.addEventListener('keydown', handleSessionHotkeys);
 
       document.addEventListener('visibilitychange', () => {
@@ -1800,8 +2230,12 @@
         renderClockOnly();
       });
 
-      window.addEventListener('beforeunload', () => {
+      window.addEventListener('beforeunload', (event) => {
         persistActiveSession();
+        if (session && session.status === 'running') {
+          event.preventDefault();
+          event.returnValue = '';
+        }
       });
 
       updateConflictHint();
