@@ -21,12 +21,16 @@ async function run() {
   const context = await browser.newContext();
   const page = await context.newPage();
   const errors = [];
+  page.setDefaultTimeout(7000);
 
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
   page.on('pageerror', (err) => {
     errors.push(String(err));
+  });
+  page.on('dialog', async (dialog) => {
+    await dialog.accept();
   });
 
   try {
@@ -88,8 +92,9 @@ async function run() {
 
     console.log('PASS: Playwright smoke flow succeeded');
   } finally {
-    await context.close();
-    await browser.close();
+    await page.close({ runBeforeUnload: false }).catch(() => {});
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
 }
 

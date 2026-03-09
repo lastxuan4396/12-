@@ -16,15 +16,28 @@ const html = fs.readFileSync(htmlPath, 'utf8');
 
 const requiredIds = [
   'conflictType',
+  'conflictIntensity',
+  'collabRoom',
+  'collabStatus',
+  'joinRoomBtn',
+  'createRoomBtn',
+  'copyRoomLinkBtn',
   'privacyModeToggle',
   'autoClearDraftToggle',
   'autoClearHistoryToggle',
   'archivePassphrase',
+  'alertWebhook',
   'importBtn',
   'importFileInput',
   'resultRewriteList',
   'copyShareBtn',
-  'analyticsBox'
+  'downloadImageBtn',
+  'downloadPdfBtn',
+  'downloadIcsBtn',
+  'notifyBtn',
+  'safetyPanel',
+  'analyticsBox',
+  'monitorBox'
 ];
 
 requiredIds.forEach((id) => {
@@ -35,12 +48,18 @@ requiredIds.forEach((id) => {
 
 const requiredSnippets = [
   'function buildRewriteSuggestions',
+  'function buildRiskRewriteSuggestions',
+  'function joinCollabRoom',
+  'function downloadShareImage',
+  'function downloadSharePdf',
+  'function downloadReminderIcs',
   'function importHistoryFromFile',
   'async function exportHistory',
   "window.addEventListener('beforeunload'",
   'function computeAnalytics',
   'function encryptArchivePayload',
-  'function decryptArchivePayload'
+  'function decryptArchivePayload',
+  "window.addEventListener('error'"
 ];
 
 requiredSnippets.forEach((snippet) => {

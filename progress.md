@@ -8,3 +8,6 @@ Original prompt: 都做
 - 2026-03-08: Local validation passed (`node scripts/smoke-check.js`, inline script parse, HTML parser, local deploy marker check).
 - 2026-03-08: Installed local Playwright toolchain (`npm i -D playwright` + `npx playwright install chromium`).
 - 2026-03-08: Added scripts/playwright-smoke.js and scripts/run-regression.sh; `npm test` now runs full local regression and passed.
+- 2026-03-09: Added collaboration room (same-browser multi-tab sync), intensity triage cooldown, safety fallback panel, reminder exports, PNG/PDF share actions, and webhook-capable error monitoring.
+- 2026-03-09: Upgraded analytics with 30-day trends, recurrence conflict metric, priority step recommendation, and high-intensity rate.
+- 2026-03-09: Added GitHub Actions CI workflow to run npm test on push/PR.

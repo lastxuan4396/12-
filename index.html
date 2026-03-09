@@ -407,6 +407,31 @@
         margin-top: 8px;
       }
 
+      .collab-box {
+        border: 1px dashed rgba(19, 111, 99, 0.35);
+        border-radius: 12px;
+        background: #f4fbf8;
+        padding: 10px;
+      }
+
+      .collab-row {
+        display: grid;
+        gap: 8px;
+      }
+
+      .intensity-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .intensity-row output {
+        font-weight: 700;
+        min-width: 64px;
+        text-align: right;
+      }
+
       .resume-box {
         border: 1px dashed rgba(19, 111, 99, 0.38);
         border-radius: 12px;
@@ -510,6 +535,62 @@
         color: var(--danger);
       }
 
+      .muted.success {
+        color: var(--ok);
+      }
+
+      .safety-panel {
+        border: 1px solid rgba(180, 35, 24, 0.35);
+        border-radius: 12px;
+        background: #fff2f1;
+        padding: 10px;
+      }
+
+      .share-actions {
+        margin-top: 6px;
+      }
+
+      .monitor-box {
+        margin-top: 8px;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: #fff;
+      }
+
+      .monitor-list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+      }
+
+      @media print {
+        body {
+          background: #fff;
+          padding: 0;
+        }
+
+        .topbar,
+        #screenStart,
+        #screenSession,
+        #resultHistoryList,
+        #startHistoryList,
+        .actions {
+          display: none !important;
+        }
+
+        #screenResult {
+          display: block !important;
+        }
+
+        .app {
+          box-shadow: none;
+          border: 0;
+          width: 100%;
+        }
+      }
+
       @media (max-width: 940px) {
         .grid,
         .double-col {
@@ -538,6 +619,7 @@
         <div class="meta">
           <span class="pill">总时长 <strong>12:00</strong></span>
           <span class="pill">历史存档 <strong id="historyCount">0</strong> 条</span>
+          <span class="pill">协作状态 <strong id="collabStatus">单机</strong></span>
         </div>
       </header>
 
@@ -558,6 +640,18 @@
                 <input id="nameB" maxlength="12" placeholder="例如：你" value="你" />
               </div>
               <div class="form-row">
+                <label>双人协作（同浏览器多标签）</label>
+                <div class="collab-box collab-row">
+                  <input id="collabRoom" maxlength="24" placeholder="房间号（可留空后自动生成）" />
+                  <div class="actions">
+                    <button id="joinRoomBtn" class="btn-plain" type="button">加入房间</button>
+                    <button id="createRoomBtn" class="btn-plain" type="button">生成房间</button>
+                    <button id="copyRoomLinkBtn" class="btn-plain" type="button">复制邀请链接</button>
+                  </div>
+                  <small id="collabHint" class="muted">默认单机模式。开启后可在同浏览器多标签同步会话。</small>
+                </div>
+              </div>
+              <div class="form-row">
                 <label for="conflictType">冲突类型模板</label>
                 <select id="conflictType" aria-label="冲突类型模板选择">
                   <option value="general">通用沟通</option>
@@ -568,6 +662,15 @@
                   <option value="boundary">边界/吃醋</option>
                 </select>
                 <p id="conflictHint" class="muted" style="margin: 0">你可以先选一个场景，流程提示会更贴近。</p>
+              </div>
+              <div class="form-row">
+                <label for="conflictIntensity">冲突强度分流（1-5）</label>
+                <div class="result-card intensity-row">
+                  <span>平稳</span>
+                  <input id="conflictIntensity" type="range" min="1" max="5" step="1" value="3" />
+                  <output id="conflictIntensityValue">3 / 5</output>
+                </div>
+                <small id="intensityHint" class="muted">当强度≥4时，开始后自动进入60秒降温步骤。</small>
               </div>
               <div class="form-row">
                 <label>流程规则</label>
@@ -601,6 +704,11 @@
                     <label for="archivePassphrase">存档口令（用于加密导出 / 解密导入）</label>
                     <input id="archivePassphrase" type="password" placeholder="留空则明文导出" autocomplete="off" />
                     <small id="importHint" class="muted"></small>
+                  </div>
+                  <div class="form-row privacy-passphrase">
+                    <label for="alertWebhook">错误告警 Webhook（可选）</label>
+                    <input id="alertWebhook" type="url" placeholder="https://example.com/webhook" />
+                    <small id="monitorHint" class="muted">留空则只在本地记录错误。填写后会在脚本报错时尝试推送告警。</small>
                   </div>
                   <div class="actions privacy-actions">
                     <button id="importBtn" class="btn-plain" type="button">导入存档</button>
@@ -661,6 +769,15 @@
                 <button id="finishBtn" class="btn-danger">提前结束</button>
               </div>
               <p id="stepError" class="step-error" role="alert" aria-live="assertive"></p>
+              <div id="safetyPanel" class="safety-panel hidden">
+                <strong>安全兜底已触发</strong>
+                <p id="safetyReason" class="muted" style="margin: 6px 0">检测到高风险表达，建议先暂停并恢复边界。</p>
+                <div class="actions">
+                  <button id="safetyCooldownBtn" class="btn-danger" type="button">进入2分钟降温</button>
+                  <button id="safetyResumeBtn" class="btn-plain" type="button">我已平稳，继续流程</button>
+                  <button id="safetyExitBtn" class="btn-plain" type="button">结束并保存边界卡</button>
+                </div>
+              </div>
               <ul id="stepTimeline" class="timeline"></ul>
             </article>
 
@@ -729,11 +846,28 @@
                   <button id="copyShareBtn" class="btn-plain" type="button">复制分享卡片</button>
                   <small id="copyShareHint" class="muted"></small>
                 </div>
+                <div class="actions share-actions">
+                  <button id="downloadImageBtn" class="btn-plain" type="button">下载图卡 PNG</button>
+                  <button id="downloadPdfBtn" class="btn-plain" type="button">导出 PDF</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <label>行动承诺提醒</label>
+                <input id="reminderTime" type="datetime-local" />
+                <div class="actions">
+                  <button id="downloadIcsBtn" class="btn-plain" type="button">下载提醒日历(.ics)</button>
+                  <button id="notifyBtn" class="btn-plain" type="button">30分钟后浏览器提醒</button>
+                  <small id="reminderHint" class="muted"></small>
+                </div>
               </div>
               <div class="form-row">
                 <label>低分步骤改写建议</label>
                 <div id="resultRewriteList" class="rewrite-list"></div>
                 <small id="rewriteCopyHint" class="muted"></small>
+              </div>
+              <div class="form-row">
+                <label>监控日志</label>
+                <div id="monitorBox" class="monitor-box"></div>
               </div>
               <div class="actions" style="margin-top: 12px">
                 <button id="restartBtn" class="btn-main">再来一轮</button>
@@ -754,24 +888,37 @@
       const STORAGE_KEY = 'repair12-history-v1';
       const ACTIVE_SESSION_KEY = 'repair12-active-session-v1';
       const SETTINGS_KEY = 'repair12-settings-v1';
+      const ERROR_LOG_KEY = 'repair12-error-log-v1';
+      const COLLAB_STORAGE_PREFIX = 'repair12-collab-v1-';
       const TOTAL_SECONDS = 12 * 60;
       const FINISH_CONFIRM_WINDOW_MS = 3000;
       const SCORE_OPTIONS = [1, 2, 3, 4, 5];
       const ARCHIVE_VERSION = 2;
       const PBKDF2_ITERATIONS = 120000;
+      const COLLAB_HEARTBEAT_MS = 5000;
+      const HIGH_INTENSITY_THRESHOLD = 4;
+      const COOLDOWN_SECONDS = 60;
+      const SAFETY_COOLDOWN_SECONDS = 120;
+
+      const RISK_PHRASE_RULES = [
+        { pattern: /你总是|你从不|每次都|永远都/g, label: '绝对化表达' },
+        { pattern: /闭嘴|滚|废物|垃圾|有病|神经病|去死/g, label: '攻击性词汇' },
+        { pattern: /分手|离婚|算了吧|到此为止/g, label: '关系终结威胁' },
+        { pattern: /我不活了|活不下去|结束生命/g, label: '极端风险表达' }
+      ];
 
       const FEELINGS = ['委屈', '生气', '焦虑', '失落', '害怕', '内疚', '沮丧', '孤单', '疲惫', '被忽视'];
       const NEEDS = ['被理解', '被尊重', '安全感', '陪伴', '信任', '空间', '确定性', '支持', '被看见', '公平'];
 
       const STEPS = [
-        { title: '规则确认', desc: '一起读规则：不打断、不翻旧账、只说这次事件。', duration: 60 },
-        { title: 'A 说事实', desc: 'A 用两分钟讲“发生了什么”。只描述事实，不评判。', duration: 120 },
-        { title: 'B 做复述', desc: 'B 用一句话复述 A 的重点。', duration: 60 },
-        { title: 'B 说事实', desc: 'B 用两分钟讲“发生了什么”。只描述事实，不评判。', duration: 120 },
-        { title: 'A 做复述', desc: 'A 用一句话复述 B 的重点。', duration: 60 },
-        { title: '感受与需要', desc: '双方都选择感受词和需要词。', duration: 120 },
-        { title: '提出请求', desc: '双方各给出一个“今天可执行”的请求。', duration: 120 },
-        { title: '和好收尾', desc: '生成一句和好承诺，确认今晚行动。', duration: 60 }
+        { title: '规则确认', desc: '一起读规则：不打断、不翻旧账、只说这次事件。', duration: 60, key: 'rules' },
+        { title: 'A 说事实', desc: 'A 用两分钟讲“发生了什么”。只描述事实，不评判。', duration: 120, key: 'factA' },
+        { title: 'B 做复述', desc: 'B 用一句话复述 A 的重点。', duration: 60, key: 'reflectB' },
+        { title: 'B 说事实', desc: 'B 用两分钟讲“发生了什么”。只描述事实，不评判。', duration: 120, key: 'factB' },
+        { title: 'A 做复述', desc: 'A 用一句话复述 B 的重点。', duration: 60, key: 'reflectA' },
+        { title: '感受与需要', desc: '双方都选择感受词和需要词。', duration: 120, key: 'feelingsNeeds' },
+        { title: '提出请求', desc: '双方各给出一个“今天可执行”的请求。', duration: 120, key: 'requests' },
+        { title: '和好收尾', desc: '生成一句和好承诺，确认今晚行动。', duration: 60, key: 'closing' }
       ];
 
       const CONFLICT_TEMPLATES = {
@@ -861,10 +1008,19 @@
 
       const els = {
         historyCount: document.getElementById('historyCount'),
+        collabStatus: document.getElementById('collabStatus'),
         nameA: document.getElementById('nameA'),
         nameB: document.getElementById('nameB'),
+        collabRoom: document.getElementById('collabRoom'),
+        joinRoomBtn: document.getElementById('joinRoomBtn'),
+        createRoomBtn: document.getElementById('createRoomBtn'),
+        copyRoomLinkBtn: document.getElementById('copyRoomLinkBtn'),
+        collabHint: document.getElementById('collabHint'),
         conflictType: document.getElementById('conflictType'),
         conflictHint: document.getElementById('conflictHint'),
+        conflictIntensity: document.getElementById('conflictIntensity'),
+        conflictIntensityValue: document.getElementById('conflictIntensityValue'),
+        intensityHint: document.getElementById('intensityHint'),
         startBtn: document.getElementById('startBtn'),
         goHistoryBtn: document.getElementById('goHistoryBtn'),
         startHistoryList: document.getElementById('startHistoryList'),
@@ -878,6 +1034,11 @@
         nextBtn: document.getElementById('nextBtn'),
         finishBtn: document.getElementById('finishBtn'),
         stepError: document.getElementById('stepError'),
+        safetyPanel: document.getElementById('safetyPanel'),
+        safetyReason: document.getElementById('safetyReason'),
+        safetyCooldownBtn: document.getElementById('safetyCooldownBtn'),
+        safetyResumeBtn: document.getElementById('safetyResumeBtn'),
+        safetyExitBtn: document.getElementById('safetyExitBtn'),
         stepTimeline: document.getElementById('stepTimeline'),
         stepForm: document.getElementById('stepForm'),
         qualityWrap: document.getElementById('qualityWrap'),
@@ -896,15 +1057,24 @@
         shareCardText: document.getElementById('shareCardText'),
         copyShareBtn: document.getElementById('copyShareBtn'),
         copyShareHint: document.getElementById('copyShareHint'),
+        downloadImageBtn: document.getElementById('downloadImageBtn'),
+        downloadPdfBtn: document.getElementById('downloadPdfBtn'),
+        reminderTime: document.getElementById('reminderTime'),
+        downloadIcsBtn: document.getElementById('downloadIcsBtn'),
+        notifyBtn: document.getElementById('notifyBtn'),
+        reminderHint: document.getElementById('reminderHint'),
         restartBtn: document.getElementById('restartBtn'),
         backStartBtn: document.getElementById('backStartBtn'),
         resultHistoryList: document.getElementById('resultHistoryList'),
+        monitorBox: document.getElementById('monitorBox'),
         privacyModeToggle: document.getElementById('privacyModeToggle'),
         autoClearDraftToggle: document.getElementById('autoClearDraftToggle'),
         autoClearHistoryToggle: document.getElementById('autoClearHistoryToggle'),
         privacyHint: document.getElementById('privacyHint'),
         archivePassphrase: document.getElementById('archivePassphrase'),
+        alertWebhook: document.getElementById('alertWebhook'),
         importHint: document.getElementById('importHint'),
+        monitorHint: document.getElementById('monitorHint'),
         importBtn: document.getElementById('importBtn'),
         importFileInput: document.getElementById('importFileInput'),
         exportBtn: document.getElementById('exportBtn'),
@@ -925,6 +1095,14 @@
       const settings = loadSettings();
       let history = loadHistory();
       let pendingResume = loadActiveSession();
+      let errorLog = loadErrorLog();
+      let collaboration = {
+        room: '',
+        channel: null,
+        peerHeartbeatAt: 0
+      };
+      let applyingRemoteState = false;
+      const tabId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
       const textEncoder = new TextEncoder();
       const textDecoder = new TextDecoder();
 
@@ -1057,17 +1235,370 @@
         els.importHint.classList.toggle('alert', Boolean(isError));
       }
 
+      function normalizeRoom(value) {
+        return String(value || '')
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9-]/g, '')
+          .slice(0, 24);
+      }
+
+      function generateRoomCode() {
+        return `R${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      }
+
+      function getRoomLink(room) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', room);
+        return url.toString();
+      }
+
+      function updateRoomInUrl(room) {
+        const url = new URL(window.location.href);
+        if (room) {
+          url.searchParams.set('room', room);
+        } else {
+          url.searchParams.delete('room');
+        }
+        window.history.replaceState({}, '', url.toString());
+      }
+
+      function getIntensityLabel(value) {
+        if (value >= 5) return '5 / 5 高压';
+        if (value >= 4) return '4 / 5 偏高';
+        if (value >= 3) return '3 / 5 中等';
+        if (value >= 2) return '2 / 5 可控';
+        return '1 / 5 平稳';
+      }
+
+      function updateIntensityDisplay() {
+        const level = clampInt(els.conflictIntensity.value, 1, 5);
+        els.conflictIntensity.value = String(level);
+        els.conflictIntensityValue.textContent = getIntensityLabel(level);
+        els.intensityHint.textContent =
+          level >= HIGH_INTENSITY_THRESHOLD
+            ? '当前会在开始后先进入60秒降温步骤。'
+            : '当前强度较可控，可直接进入流程。';
+      }
+
+      function loadErrorLog() {
+        const parsed = loadJson(ERROR_LOG_KEY, []);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+
+      function saveErrorLog() {
+        localStorage.setItem(ERROR_LOG_KEY, JSON.stringify(errorLog.slice(0, 20)));
+      }
+
+      function recordClientError(message, detail = '') {
+        const entry = {
+          at: new Date().toISOString(),
+          message: String(message || 'Unknown error'),
+          detail: String(detail || '').slice(0, 400)
+        };
+        errorLog = [entry, ...errorLog].slice(0, 20);
+        saveErrorLog();
+        if (settings.alertWebhook) {
+          const payload = JSON.stringify({
+            source: 'repair12-client',
+            ...entry
+          });
+          try {
+            if (navigator.sendBeacon) {
+              navigator.sendBeacon(settings.alertWebhook, new Blob([payload], { type: 'application/json' }));
+            } else {
+              fetch(settings.alertWebhook, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload,
+                keepalive: true
+              }).catch(() => {});
+            }
+          } catch (err) {}
+        }
+      }
+
+      function renderMonitorBox() {
+        if (!els.monitorBox) return;
+        if (!errorLog.length) {
+          els.monitorBox.innerHTML = '<small class="muted success">运行稳定，最近没有捕获到前端错误。</small>';
+          return;
+        }
+        const rows = errorLog
+          .slice(0, 5)
+          .map((item) => `<li><small>${escapeHtml(formatTime(item.at))}｜${escapeHtml(item.message)}</small></li>`)
+          .join('');
+        els.monitorBox.innerHTML = `<small class="muted alert">最近捕获到 ${errorLog.length} 条前端错误：</small><ul class="monitor-list">${rows}</ul>`;
+      }
+
+      function pickRiskPhrases(text) {
+        const source = String(text || '').trim();
+        if (!source) return [];
+        const hits = [];
+        RISK_PHRASE_RULES.forEach((rule) => {
+          const matched = source.match(rule.pattern);
+          if (matched && matched.length) {
+            hits.push({
+              label: rule.label,
+              examples: [...new Set(matched)].slice(0, 3)
+            });
+          }
+        });
+        return hits;
+      }
+
+      function collectRiskInputs(targetSession) {
+        return [
+          ['factA', `${targetSession.names.a}事实`, targetSession.factA],
+          ['factB', `${targetSession.names.b}事实`, targetSession.factB],
+          ['reflectA', `${targetSession.names.a}复述`, targetSession.reflectA],
+          ['reflectB', `${targetSession.names.b}复述`, targetSession.reflectB],
+          ['requestA', `${targetSession.names.a}请求`, targetSession.requestA],
+          ['requestB', `${targetSession.names.b}请求`, targetSession.requestB],
+          ['peaceLine', '和好一句话', targetSession.peaceLine],
+          ['tonightAction', '今晚行动', targetSession.tonightAction]
+        ];
+      }
+
+      function buildRiskRewriteSuggestions(targetSession) {
+        const suggestions = [];
+        collectRiskInputs(targetSession).forEach(([field, label, value]) => {
+          const hits = pickRiskPhrases(value);
+          if (!hits.length) return;
+          const phraseText = hits.map((h) => `${h.label}：${h.examples.join('、')}`).join('；');
+          suggestions.push({
+            title: `风险句替代 · ${label}`,
+            text: `识别到：${phraseText}\n原句：${compactLine(value, '未填写')}\n替代：当[具体事件]发生时，我感到[感受]，我需要[需要]，我请求你[具体行为]。`
+          });
+        });
+        return suggestions.slice(0, 3);
+      }
+
+      function findSafetyRisk(targetSession) {
+        const all = collectRiskInputs(targetSession);
+        for (let i = 0; i < all.length; i += 1) {
+          const [, label, value] = all[i];
+          const hits = pickRiskPhrases(value);
+          if (hits.length) {
+            return {
+              label,
+              detail: hits.map((x) => `${x.label}(${x.examples.join('、')})`).join('；')
+            };
+          }
+        }
+        return null;
+      }
+
+      function showSafetyPanel(message) {
+        if (!session) return;
+        if (!session.paused) {
+          session.totalRemaining = secondsUntil(session.totalEndsAt);
+          session.stepRemaining = secondsUntil(session.stepEndsAt);
+        }
+        session.inSafetyMode = true;
+        session.paused = true;
+        session.safetyReason = message;
+        els.safetyReason.textContent = message;
+        els.safetyPanel.classList.remove('hidden');
+        renderClockOnly();
+        persistActiveSession();
+      }
+
+      function hideSafetyPanel() {
+        if (!session) return;
+        session.inSafetyMode = false;
+        session.safetyReason = '';
+        els.safetyPanel.classList.add('hidden');
+      }
+
+      function startSafetyCooldown() {
+        if (!session) return;
+        session.safetyCooldownEndsAt = nowMs() + SAFETY_COOLDOWN_SECONDS * 1000;
+        showSafetyPanel(`已进入${SAFETY_COOLDOWN_SECONDS}秒降温，请先做深呼吸和边界确认。`);
+      }
+
+      function resolveSafetyMode() {
+        if (!session) return;
+        hideSafetyPanel();
+        session.safetyCooldownEndsAt = 0;
+      }
+
+      function handleSafetyTick() {
+        if (!session || !session.inSafetyMode || !session.safetyCooldownEndsAt) return;
+        const remain = secondsUntil(session.safetyCooldownEndsAt);
+        if (remain <= 0) {
+          els.safetyReason.textContent = '降温已完成。建议先用一句“我会先说事实，不做人身评价”再继续。';
+          session.safetyCooldownEndsAt = 0;
+          persistActiveSession();
+        } else {
+          els.safetyReason.textContent = `已触发安全兜底。请先降温 ${formatSec(remain)}，然后继续流程。`;
+        }
+      }
+
+      function syncStartDraft() {
+        if (!collaboration.room || applyingRemoteState) return;
+        sendCollabMessage('sync-start', {
+          names: {
+            a: (els.nameA.value || '').trim(),
+            b: (els.nameB.value || '').trim()
+          },
+          conflictType: els.conflictType.value,
+          conflictIntensity: clampInt(els.conflictIntensity.value, 1, 5)
+        });
+      }
+
+      function syncSessionState(reason = 'sync-state') {
+        if (!collaboration.room || !session || applyingRemoteState) return;
+        session.syncVersion = Number(session.syncVersion || 0) + 1;
+        sendCollabMessage(reason, { session });
+      }
+
+      function applyRemoteStartDraft(payload) {
+        if (session) return;
+        applyingRemoteState = true;
+        try {
+          if (payload?.names?.a) els.nameA.value = payload.names.a;
+          if (payload?.names?.b) els.nameB.value = payload.names.b;
+          if (payload?.conflictType && CONFLICT_TEMPLATES[payload.conflictType]) {
+            els.conflictType.value = payload.conflictType;
+          }
+          if (payload?.conflictIntensity) {
+            els.conflictIntensity.value = String(clampInt(payload.conflictIntensity, 1, 5));
+          }
+          updateConflictHint();
+          updateIntensityDisplay();
+        } finally {
+          applyingRemoteState = false;
+        }
+      }
+
+      function applyRemoteSession(payload) {
+        if (!payload || !payload.id) return;
+        applyingRemoteState = true;
+        try {
+          if (!session || session.id !== payload.id || Number(payload.syncVersion || 0) >= Number(session.syncVersion || 0)) {
+            session = createSession(payload);
+            renderedStepIndex = -1;
+            showScreen(payload.status === 'running' ? 'session' : 'result');
+            if (payload.status === 'running') {
+              renderSession(true);
+            } else {
+              renderResult();
+            }
+          }
+        } finally {
+          applyingRemoteState = false;
+        }
+      }
+
+      function updateCollabStatus() {
+        const room = collaboration.room;
+        if (!room) {
+          els.collabStatus.textContent = '单机';
+          els.collabHint.textContent = '默认单机模式。开启后可在同浏览器多标签同步会话。';
+          return;
+        }
+        const online = nowMs() - collaboration.peerHeartbeatAt <= COLLAB_HEARTBEAT_MS * 2;
+        els.collabStatus.textContent = online ? `${room}·双端在线` : `${room}·等待对端`;
+        els.collabHint.textContent = `房间 ${room} 已连接。${online ? '检测到对端心跳，正在实时同步。' : '已加入，等待另一端加入。'}`;
+      }
+
+      function closeCollabChannel() {
+        if (collaboration.channel) {
+          collaboration.channel.close();
+          collaboration.channel = null;
+        }
+      }
+
+      function onCollabPayload(message) {
+        if (!message || message.sender === tabId || message.room !== collaboration.room) return;
+        collaboration.peerHeartbeatAt = nowMs();
+        updateCollabStatus();
+        if (message.type === 'sync-start') {
+          applyRemoteStartDraft(message.payload);
+        } else if (message.type === 'sync-state' || message.type === 'session-start' || message.type === 'session-finish') {
+          applyRemoteSession(message.payload?.session);
+        } else if (message.type === 'heartbeat') {
+          // heartbeat only
+        }
+      }
+
+      function sendCollabMessage(type, payload = {}) {
+        if (!collaboration.room) return;
+        const message = {
+          type,
+          room: collaboration.room,
+          payload,
+          sender: tabId,
+          at: nowMs()
+        };
+        if (collaboration.channel) {
+          collaboration.channel.postMessage(message);
+        }
+        try {
+          localStorage.setItem(`${COLLAB_STORAGE_PREFIX}${collaboration.room}`, JSON.stringify(message));
+        } catch (err) {}
+      }
+
+      function joinCollabRoom(inputRoom) {
+        const room = normalizeRoom(inputRoom);
+        if (!room) {
+          els.collabHint.textContent = '房间号不能为空。';
+          return false;
+        }
+        closeCollabChannel();
+        collaboration.room = room;
+        collaboration.peerHeartbeatAt = 0;
+        els.collabRoom.value = room;
+        collaboration.channel = new BroadcastChannel(`repair12-collab-${room}`);
+        collaboration.channel.onmessage = (event) => onCollabPayload(event.data);
+        updateRoomInUrl(room);
+        updateCollabStatus();
+        sendCollabMessage('heartbeat');
+        syncStartDraft();
+        if (session) syncSessionState('sync-state');
+        return true;
+      }
+
+      function autoJoinRoomFromUrl() {
+        const room = normalizeRoom(new URL(window.location.href).searchParams.get('room'));
+        if (room) {
+          joinCollabRoom(room);
+        }
+      }
+
+      function handleStorageSync(event) {
+        if (!collaboration.room) return;
+        if (event.key === ERROR_LOG_KEY && event.newValue) {
+          try {
+            errorLog = JSON.parse(event.newValue);
+            renderMonitorBox();
+          } catch (err) {}
+        }
+        const key = `${COLLAB_STORAGE_PREFIX}${collaboration.room}`;
+        if (event.key !== key || !event.newValue) return;
+        try {
+          const payload = JSON.parse(event.newValue);
+          onCollabPayload(payload);
+        } catch (err) {}
+      }
+
+      function setDefaultReminderTime() {
+        const date = new Date(nowMs() + 30 * 60 * 1000);
+        const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        els.reminderTime.value = local;
+      }
+
       function createSession(override = {}) {
         const a = (override.names?.a || els.nameA.value || '我').trim() || '我';
         const b = (override.names?.b || els.nameB.value || '你').trim() || '你';
         const conflictType = override.conflictType || els.conflictType.value || 'general';
+        const conflictIntensity = clampInt(override.conflictIntensity ?? els.conflictIntensity.value, 1, 5);
+        const inCooldown = Boolean(override.inCooldown ?? conflictIntensity >= HIGH_INTENSITY_THRESHOLD);
         const startAt = nowMs();
         const initialStepIndex = clampInt(override.stepIndex ?? 0, 0, STEPS.length - 1);
-        const initialStepSeconds = clampInt(
-          override.stepRemaining ?? getStepDuration(initialStepIndex),
-          1,
-          getStepDuration(initialStepIndex)
-        );
+        const initialStepMax = inCooldown ? COOLDOWN_SECONDS : getStepDuration(initialStepIndex);
+        const initialStepSeconds = clampInt(override.stepRemaining ?? initialStepMax, 1, initialStepMax);
         const initialTotalSeconds = clampInt(override.totalRemaining ?? TOTAL_SECONDS, 1, TOTAL_SECONDS);
         const isPaused = Boolean(override.paused);
         const totalEndsAt =
@@ -1086,6 +1617,7 @@
           status: override.status || 'running',
           names: { a, b },
           conflictType,
+          conflictIntensity,
           stepIndex: initialStepIndex,
           totalRemaining: initialTotalSeconds,
           stepRemaining: initialStepSeconds,
@@ -1105,7 +1637,12 @@
           tonightAction: override.tonightAction || '',
           stepScores: override.stepScores && typeof override.stepScores === 'object' ? override.stepScores : {},
           paused: isPaused,
-          privacyMode: Boolean(override.privacyMode ?? settings.privacyMode)
+          privacyMode: Boolean(override.privacyMode ?? settings.privacyMode),
+          inCooldown,
+          inSafetyMode: Boolean(override.inSafetyMode),
+          safetyReason: override.safetyReason || '',
+          safetyCooldownEndsAt: Number(override.safetyCooldownEndsAt || 0),
+          syncVersion: Number(override.syncVersion || 0)
         };
       }
 
@@ -1119,9 +1656,15 @@
           normalized.stepRemaining = secondsUntil(normalized.stepEndsAt);
           if (normalized.totalRemaining <= 0) return null;
           if (normalized.stepRemaining <= 0) {
-            normalized.paused = true;
-            normalized.stepRemaining = 1;
-            normalized.stepEndsAt = nowMs() + 1000;
+            if (normalized.inCooldown) {
+              normalized.inCooldown = false;
+              normalized.stepRemaining = getStepDuration(normalized.stepIndex);
+              normalized.stepEndsAt = nowMs() + normalized.stepRemaining * 1000;
+            } else {
+              normalized.paused = true;
+              normalized.stepRemaining = 1;
+              normalized.stepEndsAt = nowMs() + 1000;
+            }
           }
         }
         return normalized;
@@ -1147,9 +1690,13 @@
         els.privacyModeToggle.checked = enabled;
         els.autoClearDraftToggle.checked = Boolean(settings.autoClearDraftOnFinish);
         els.autoClearHistoryToggle.checked = Boolean(settings.autoClearHistoryOnFinish);
+        els.alertWebhook.value = settings.alertWebhook || '';
         els.privacyHint.textContent = enabled
           ? '隐私模式开启：不会保存本轮记录，也不会恢复未完成会话。'
           : `当前会把已完成会话保存到本地浏览器。结束后自动清理草稿：${settings.autoClearDraftOnFinish ? '开' : '关'}；自动清空历史：${settings.autoClearHistoryOnFinish ? '开' : '关'}。`;
+        els.monitorHint.textContent = settings.alertWebhook
+          ? '已配置 webhook，将在捕获脚本错误时尝试推送告警。'
+          : '留空则只在本地记录错误。填写后会在脚本报错时尝试推送告警。';
       }
 
       function renderResumeCard() {
@@ -1164,7 +1711,7 @@
         els.resumeMeta.textContent = `上次在 ${formatTime(pendingResume.startedAt)} 开始，当前步骤：${stepLabel}（${status}）。`;
         els.resumePreview.innerHTML = `
           <strong>${escapeHtml(pendingResume.names.a)} / ${escapeHtml(pendingResume.names.b)}</strong><br />
-          模板：${escapeHtml(templateLabel)}<br />
+          模板：${escapeHtml(templateLabel)} ｜ 强度：${escapeHtml(String(pendingResume.conflictIntensity || 3))}/5<br />
           总剩余：${formatSec(pendingResume.totalRemaining)}｜步骤剩余：${formatSec(pendingResume.stepRemaining)}
         `;
         els.resumeWrap.classList.remove('hidden');
@@ -1179,19 +1726,20 @@
         els.stepTimer.textContent = formatSec(session.stepRemaining);
         const doneRatio = ((TOTAL_SECONDS - session.totalRemaining) / TOTAL_SECONDS) * 100;
         els.totalProgress.style.width = `${Math.min(100, Math.max(0, doneRatio))}%`;
-        els.pauseBtn.textContent = session.paused ? '继续' : '暂停';
+        els.pauseBtn.textContent = session.inSafetyMode ? '安全暂停' : session.paused ? '继续' : '暂停';
       }
 
       function renderTimeline() {
         if (!session) return;
         els.stepTimeline.innerHTML = STEPS.map((step, idx) => {
           const cls = idx < session.stepIndex ? 'done' : idx === session.stepIndex ? 'current' : '';
-          return `<li class="${cls}"><span>${idx + 1}. ${step.title}</span><span>${formatSec(step.duration)}</span></li>`;
+          const title = session.inCooldown && idx === session.stepIndex ? `降温步骤（${step.title}前）` : step.title;
+          return `<li class="${cls}"><span>${idx + 1}. ${title}</span><span>${formatSec(step.duration)}</span></li>`;
         }).join('');
       }
 
       function renderQualityControls() {
-        if (!session || session.stepIndex === 0) {
+        if (!session || session.stepIndex === 0 || session.inCooldown) {
           els.qualityWrap.classList.add('hidden');
           els.qualityRow.innerHTML = '';
           return;
@@ -1218,19 +1766,33 @@
             session.stepScores[String(session.stepIndex)] = score;
             renderQualityControls();
             persistActiveSession();
+            syncSessionState('sync-state');
           });
         });
       }
 
       function renderSession(forceForm = false) {
         if (!session) return;
-        els.stepTitle.textContent = `Step ${session.stepIndex + 1} · ${STEPS[session.stepIndex].title}`;
-        els.stepDesc.textContent = getStepDesc(session.stepIndex, session.conflictType);
+        if (session.inCooldown) {
+          els.stepTitle.textContent = `降温步骤 · ${COOLDOWN_SECONDS}秒`;
+          els.stepDesc.textContent = '冲突强度较高，先降温再继续。请先呼吸、放慢语速、确认边界。';
+        } else {
+          els.stepTitle.textContent = `Step ${session.stepIndex + 1} · ${STEPS[session.stepIndex].title}`;
+          els.stepDesc.textContent = getStepDesc(session.stepIndex, session.conflictType);
+        }
         renderClockOnly();
         renderTimeline();
+        if (session.inSafetyMode) {
+          els.safetyPanel.classList.remove('hidden');
+          els.safetyReason.textContent = session.safetyReason || '已触发安全兜底。请先降温后再继续。';
+        } else {
+          els.safetyPanel.classList.add('hidden');
+        }
+        els.nextBtn.disabled = Boolean(session.inSafetyMode && session.safetyCooldownEndsAt);
+        els.pauseBtn.disabled = Boolean(session.inSafetyMode);
 
         if (forceForm || renderedStepIndex !== session.stepIndex) {
-          if (session.stepIndex === STEPS.length - 1) {
+          if (!session.inCooldown && session.stepIndex === STEPS.length - 1) {
             if (!session.peaceLine) session.peaceLine = buildPeaceLine();
             if (!session.tonightAction) session.tonightAction = suggestTonightAction();
           }
@@ -1253,7 +1815,9 @@
       function startTimer() {
         clearInterval(timer);
         timer = setInterval(() => {
-          if (!session || session.paused || session.status !== 'running') return;
+          if (!session || session.status !== 'running') return;
+          handleSafetyTick();
+          if (session.paused || session.inSafetyMode) return;
 
           session.totalRemaining = secondsUntil(session.totalEndsAt);
           session.stepRemaining = secondsUntil(session.stepEndsAt);
@@ -1266,6 +1830,16 @@
           }
 
           if (session.stepRemaining <= 0) {
+            if (session.inCooldown) {
+              session.inCooldown = false;
+              session.stepRemaining = getStepDuration(session.stepIndex);
+              session.stepEndsAt = nowMs() + session.stepRemaining * 1000;
+              showStepError('降温完成，进入正式流程。');
+              renderSession(true);
+              persistActiveSession();
+              syncSessionState('sync-state');
+              return;
+            }
             const moved = nextStep({ fromTimer: true });
             if (!moved) {
               session.paused = true;
@@ -1285,13 +1859,41 @@
       }
 
       function requireScoreForCurrentStep() {
-        if (!session || session.stepIndex === 0) return '';
+        if (!session || session.stepIndex === 0 || session.inCooldown) return '';
         const score = Number(session.stepScores[String(session.stepIndex)] || 0);
         return score > 0 ? '' : '请先为本步骤打分（1-5 分）。';
       }
 
+      function getCurrentStepRiskReason(targetSession) {
+        const idx = targetSession.stepIndex;
+        const samples = [];
+        if (idx === 1) samples.push([`${targetSession.names.a}事实`, targetSession.factA]);
+        if (idx === 2) samples.push([`${targetSession.names.b}复述`, targetSession.reflectB]);
+        if (idx === 3) samples.push([`${targetSession.names.b}事实`, targetSession.factB]);
+        if (idx === 4) samples.push([`${targetSession.names.a}复述`, targetSession.reflectA]);
+        if (idx === 6) {
+          samples.push([`${targetSession.names.a}请求`, targetSession.requestA]);
+          samples.push([`${targetSession.names.b}请求`, targetSession.requestB]);
+        }
+        if (idx === 7) {
+          samples.push(['和好一句话', targetSession.peaceLine]);
+          samples.push(['今晚行动', targetSession.tonightAction]);
+        }
+        for (let i = 0; i < samples.length; i += 1) {
+          const [label, text] = samples[i];
+          const hits = pickRiskPhrases(text);
+          if (hits.length) {
+            const detail = hits.map((x) => `${x.label}(${x.examples.join('、')})`).join('；');
+            return `${label}中检测到高风险表达：${detail}。建议先进入安全兜底。`;
+          }
+        }
+        return '';
+      }
+
       function validateCurrentStep() {
         if (!session) return '';
+        if (session.inSafetyMode) return '当前处于安全兜底，请先完成降温或手动恢复。';
+        if (session.inCooldown) return '';
         let error = '';
 
         switch (session.stepIndex) {
@@ -1345,6 +1947,25 @@
           return false;
         }
 
+        if (session.inCooldown) {
+          session.inCooldown = false;
+          session.stepRemaining = getStepDuration(session.stepIndex);
+          session.stepEndsAt = nowMs() + session.stepRemaining * 1000;
+          clearStepError();
+          renderSession(true);
+          persistActiveSession();
+          syncSessionState('sync-state');
+          return true;
+        }
+
+        const safetyReason = getCurrentStepRiskReason(session);
+        if (safetyReason) {
+          showSafetyPanel(safetyReason);
+          showStepError('检测到高风险表达，建议先进入安全兜底流程。');
+          syncSessionState('sync-state');
+          return false;
+        }
+
         clearStepError();
         resetFinishConfirm();
 
@@ -1363,6 +1984,7 @@
         }
         renderSession(true);
         persistActiveSession();
+        syncSessionState('sync-state');
         return true;
       }
 
@@ -1376,6 +1998,7 @@
         clearInterval(timer);
         clearStepError();
         resetFinishConfirm();
+        hideSafetyPanel();
 
         if (!session.peaceLine) session.peaceLine = buildPeaceLine();
         if (!session.tonightAction) session.tonightAction = suggestTonightAction();
@@ -1396,12 +2019,14 @@
         if (settings.autoClearDraftOnFinish) {
           localStorage.removeItem(ACTIVE_SESSION_KEY);
         }
+        syncSessionState('session-finish');
         renderResult();
         showScreen('result');
       }
 
       function togglePause() {
         if (!session || session.status !== 'running') return;
+        if (session.inSafetyMode) return;
         resetFinishConfirm();
 
         if (session.paused) {
@@ -1416,6 +2041,7 @@
 
         renderClockOnly();
         persistActiveSession();
+        syncSessionState('sync-state');
       }
 
       function joinLabels(values, fallback) {
@@ -1512,7 +2138,8 @@
           if (text) suggestions.push({ title, text });
         });
 
-        return suggestions;
+        const riskSuggestions = buildRiskRewriteSuggestions(targetSession);
+        return [...suggestions, ...riskSuggestions].slice(0, 6);
       }
 
       function renderRewriteSuggestions(targetSession) {
@@ -1545,6 +2172,7 @@
         return [
           '【12分钟和好记录】',
           `场景：${templateLabel}`,
+          `冲突强度：${targetSession.conflictIntensity || 3}/5`,
           `双方：${targetSession.names.a} / ${targetSession.names.b}`,
           `和好一句话：${targetSession.peaceLine || '-'}`,
           `今晚行动：${targetSession.tonightAction || '-'}`,
@@ -1556,6 +2184,7 @@
         if (!session) return;
         session[field] = value;
         persistActiveSession();
+        syncSessionState('sync-state');
       }
 
       function toggleWord(field, word) {
@@ -1568,6 +2197,7 @@
         }
         renderStepForm();
         persistActiveSession();
+        syncSessionState('sync-state');
       }
 
       function renderChips(label, field, words) {
@@ -1599,7 +2229,18 @@
         `;
 
         let html = '';
-        if (index === 0) {
+        if (session.inCooldown) {
+          html = `
+            <div class="result-card">
+              当前检测到冲突强度较高（${session.conflictIntensity}/5）。<br />
+              请先进行 60 秒降温：<br />
+              1）闭口深呼吸 6 次；<br />
+              2）各说一句“我想解决问题，不想赢你”；<br />
+              3）确认边界：不辱骂、不威胁、不离场。<br />
+              可等待自动结束，也可点击“下一步”提前进入流程。
+            </div>
+          `;
+        } else if (index === 0) {
           html = `
             <div class="result-card">
               请一起读出规则，然后按“下一步”进入发言。<br />
@@ -1667,6 +2308,7 @@
             session.tonightAction = suggestTonightAction();
             renderStepForm();
             persistActiveSession();
+            syncSessionState('sync-state');
           });
         }
 
@@ -1687,6 +2329,9 @@
         renderRewriteSuggestions(session);
         els.shareCardText.value = buildShareCard(session);
         els.copyShareHint.textContent = '';
+        els.reminderHint.textContent = '';
+        setDefaultReminderTime();
+        renderMonitorBox();
         renderHistoryLists();
       }
 
@@ -1705,7 +2350,8 @@
         return {
           privacyMode: Boolean(settingsRaw.privacyMode),
           autoClearDraftOnFinish: Boolean(settingsRaw.autoClearDraftOnFinish),
-          autoClearHistoryOnFinish: Boolean(settingsRaw.autoClearHistoryOnFinish)
+          autoClearHistoryOnFinish: Boolean(settingsRaw.autoClearHistoryOnFinish),
+          alertWebhook: String(settingsRaw.alertWebhook || '').trim()
         };
       }
 
@@ -1737,6 +2383,7 @@
           status: item.status === 'done' ? 'done' : 'aborted',
           names,
           conflictType: item.conflictType || 'general',
+          conflictIntensity: clampInt(item.conflictIntensity ?? 3, 1, 5),
           factA: item.factA || '',
           factB: item.factB || '',
           reflectA: item.reflectA || '',
@@ -1823,6 +2470,45 @@
         };
       }
 
+      function getPriorityStep(records) {
+        const bucket = {};
+        records.forEach((record) => {
+          Object.entries(record.stepScores || {}).forEach(([step, score]) => {
+            const idx = Number(step);
+            const val = Number(score);
+            if (!idx || !Number.isFinite(val) || val <= 0) return;
+            if (!bucket[idx]) bucket[idx] = [];
+            bucket[idx].push(val);
+          });
+        });
+        const entries = Object.entries(bucket).map(([step, values]) => {
+          const avg = values.reduce((sum, x) => sum + x, 0) / values.length;
+          return { step: Number(step), avg: Number(avg.toFixed(1)), count: values.length };
+        });
+        if (!entries.length) return null;
+        entries.sort((a, b) => a.avg - b.avg || b.count - a.count);
+        const top = entries[0];
+        return {
+          title: STEPS[top.step]?.title || `Step ${top.step}`,
+          avg: top.avg,
+          count: top.count
+        };
+      }
+
+      function getTopConflictWithCount(records) {
+        const map = {};
+        records.forEach((r) => {
+          const key = r.conflictType || 'general';
+          map[key] = (map[key] || 0) + 1;
+        });
+        const top = Object.entries(map).sort((a, b) => b[1] - a[1])[0];
+        if (!top) return null;
+        return {
+          label: getTemplateLabel(top[0]),
+          count: top[1]
+        };
+      }
+
       function formatTrend(current, previous, digits = 0, suffix = '') {
         if (previous === null) {
           return `${current.toFixed(digits)}${suffix}（无上期数据）`;
@@ -1852,13 +2538,26 @@
         const dayMs = 24 * 60 * 60 * 1000;
         const currentStart = now - dayMs * 7;
         const previousStart = now - dayMs * 14;
+        const current30Start = now - dayMs * 30;
+        const previous30Start = now - dayMs * 60;
         const currentWindow = records.filter((r) => getRecordTimestamp(r) >= currentStart);
         const previousWindow = records.filter((r) => {
           const ts = getRecordTimestamp(r);
           return ts >= previousStart && ts < currentStart;
         });
+        const current30Window = records.filter((r) => getRecordTimestamp(r) >= current30Start);
+        const previous30Window = records.filter((r) => {
+          const ts = getRecordTimestamp(r);
+          return ts >= previous30Start && ts < current30Start;
+        });
         const summary7 = summarizeWindow(currentWindow);
         const summaryPrev = summarizeWindow(previousWindow);
+        const summary30 = summarizeWindow(current30Window);
+        const summaryPrev30 = summarizeWindow(previous30Window);
+        const priorityStep = getPriorityStep(records);
+        const recurrence = getTopConflictWithCount(current30Window);
+        const highIntensityRate =
+          records.length > 0 ? Math.round((records.filter((x) => clampInt(x.conflictIntensity ?? 3, 1, 5) >= 4).length / records.length) * 100) : 0;
 
         return {
           total,
@@ -1871,7 +2570,12 @@
           topNeeds: aggregateTopByFields(records, ['needsA', 'needsB']) || '-',
           trend7Completion: formatTrend(summary7.completionRate, summaryPrev.total ? summaryPrev.completionRate : null, 0, '%'),
           trend7Score: formatTrend(summary7.avgScore, summaryPrev.total ? summaryPrev.avgScore : null, 1, '分'),
-          trend7Conflict: summary7.topConflictLabel
+          trend7Conflict: summary7.topConflictLabel,
+          trend30Completion: formatTrend(summary30.completionRate, summaryPrev30.total ? summaryPrev30.completionRate : null, 0, '%'),
+          trend30Score: formatTrend(summary30.avgScore, summaryPrev30.total ? summaryPrev30.avgScore : null, 1, '分'),
+          recurrenceConflict: recurrence ? `${recurrence.label}（${recurrence.count}次）` : '-',
+          priorityStep: priorityStep ? `${priorityStep.title}（均分 ${priorityStep.avg}，样本 ${priorityStep.count}）` : '-',
+          highIntensityRate
         };
       }
 
@@ -1893,6 +2597,11 @@
             近7天完成率：${escapeHtml(a.trend7Completion)}<br />
             近7天平均分：${escapeHtml(a.trend7Score)}<br />
             近7天高频场景：${escapeHtml(a.trend7Conflict)}<br />
+            近30天完成率：${escapeHtml(a.trend30Completion)}<br />
+            近30天平均分：${escapeHtml(a.trend30Score)}<br />
+            近30天复发场景：${escapeHtml(a.recurrenceConflict)}<br />
+            优先优化步骤：${escapeHtml(a.priorityStep)}<br />
+            高强度冲突占比：${escapeHtml(String(a.highIntensityRate))}%<br />
             高频感受：${escapeHtml(a.topFeelings)}<br />
             高频需要：${escapeHtml(a.topNeeds)}
           </small>
@@ -1911,11 +2620,12 @@
                   const line = escapeHtml(item.peaceLine || '本轮未填写和好一句话');
                   const score = getAverageScore(item.stepScores);
                   const conflict = escapeHtml(getTemplateLabel(item.conflictType || 'general'));
+                  const intensity = clampInt(item.conflictIntensity ?? 3, 1, 5);
                   return `
                     <li>
                       <div>
                         <span class="kudos ${badgeClass}">${badgeText}</span>
-                        <small style="margin-left:6px">${formatTime(item.startedAt)} ｜ ${conflict}${score ? ` ｜ ${score}分` : ''}</small>
+                        <small style="margin-left:6px">${formatTime(item.startedAt)} ｜ ${conflict} ｜ 强度${intensity}/5${score ? ` ｜ ${score}分` : ''}</small>
                       </div>
                       <div>${line}</div>
                     </li>
@@ -2027,7 +2737,9 @@
         if (mode === 'resume' && pendingResume) {
           session = createSession(pendingResume);
           els.conflictType.value = session.conflictType;
+          els.conflictIntensity.value = String(clampInt(session.conflictIntensity, 1, 5));
           updateConflictHint();
+          updateIntensityDisplay();
           pendingResume = null;
           if (!session.paused) {
             session.totalRemaining = secondsUntil(session.totalEndsAt);
@@ -2056,6 +2768,7 @@
         persistActiveSession();
         renderResumeCard();
         startTimer();
+        syncSessionState('session-start');
       }
 
       function discardPendingResume() {
@@ -2068,6 +2781,9 @@
 
       function closeSessionToStart() {
         clearInterval(timer);
+        if (session) {
+          hideSafetyPanel();
+        }
         session = null;
         resetFinishConfirm();
         clearStepError();
@@ -2125,6 +2841,166 @@
         els.rewriteCopyHint.textContent = ok ? '改写建议已复制' : '复制失败，请手动选择内容复制';
       }
 
+      function buildReminderIcs(targetSession, date) {
+        const dt = new Date(date);
+        const end = new Date(dt.getTime() + 30 * 60 * 1000);
+        const fmt = (x) =>
+          `${x.getUTCFullYear()}${String(x.getUTCMonth() + 1).padStart(2, '0')}${String(x.getUTCDate()).padStart(2, '0')}T${String(x.getUTCHours()).padStart(2, '0')}${String(x.getUTCMinutes()).padStart(2, '0')}00Z`;
+        const summary = `${targetSession.names.a}/${targetSession.names.b} 12分钟和好行动提醒`;
+        const desc = `${targetSession.tonightAction || '完成今晚行动并互相确认一句“我收到了”。'}`.replace(/\n/g, ' ');
+        return [
+          'BEGIN:VCALENDAR',
+          'VERSION:2.0',
+          'PRODID:-//repair12//NVC//CN',
+          'BEGIN:VEVENT',
+          `UID:${targetSession.id}@repair12.local`,
+          `DTSTAMP:${fmt(new Date())}`,
+          `DTSTART:${fmt(dt)}`,
+          `DTEND:${fmt(end)}`,
+          `SUMMARY:${summary}`,
+          `DESCRIPTION:${desc}`,
+          'END:VEVENT',
+          'END:VCALENDAR'
+        ].join('\r\n');
+      }
+
+      function downloadReminderIcs() {
+        if (!session) return;
+        const selected = els.reminderTime.value;
+        if (!selected) {
+          els.reminderHint.textContent = '请先选择提醒时间。';
+          return;
+        }
+        const date = new Date(selected);
+        if (Number.isNaN(date.getTime())) {
+          els.reminderHint.textContent = '提醒时间格式无效。';
+          return;
+        }
+        const content = buildReminderIcs(session, date);
+        const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `repair12-reminder-${session.id}.ics`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(link.href);
+        els.reminderHint.textContent = '提醒日历已下载。';
+      }
+
+      async function scheduleBrowserReminder() {
+        if (!session) return;
+        if (!('Notification' in window)) {
+          els.reminderHint.textContent = '当前浏览器不支持通知。';
+          return;
+        }
+        if (Notification.permission !== 'granted') {
+          const permission = await Notification.requestPermission();
+          if (permission !== 'granted') {
+            els.reminderHint.textContent = '未授予通知权限。';
+            return;
+          }
+        }
+        setTimeout(() => {
+          new Notification('12分钟和好提醒', {
+            body: session?.tonightAction || '该执行你们的今晚行动了。'
+          });
+        }, 30 * 60 * 1000);
+        els.reminderHint.textContent = '已设置30分钟后提醒（浏览器需保持运行）。';
+      }
+
+      function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
+        const raw = String(text || '').split('\n');
+        let cursorY = y;
+        raw.forEach((line) => {
+          let current = '';
+          const chars = line.split('');
+          chars.forEach((ch) => {
+            const next = current + ch;
+            if (ctx.measureText(next).width > maxWidth) {
+              ctx.fillText(current, x, cursorY);
+              cursorY += lineHeight;
+              current = ch;
+            } else {
+              current = next;
+            }
+          });
+          if (current) {
+            ctx.fillText(current, x, cursorY);
+            cursorY += lineHeight;
+          }
+        });
+        return cursorY;
+      }
+
+      function downloadShareImage() {
+        if (!session) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1350;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff9ef';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#e9f5f1';
+        ctx.fillRect(40, 40, canvas.width - 80, canvas.height - 80);
+        ctx.fillStyle = '#24303a';
+        ctx.font = 'bold 52px "Noto Sans SC"';
+        ctx.fillText('12分钟和好', 90, 150);
+        ctx.font = '28px "Noto Sans SC"';
+        const lines = [
+          `场景：${getTemplateLabel(session.conflictType)}`,
+          `双方：${session.names.a} / ${session.names.b}`,
+          `质量分：${getAverageScore(session.stepScores) || '-'}`
+        ];
+        let y = 220;
+        lines.forEach((line) => {
+          ctx.fillText(line, 90, y);
+          y += 50;
+        });
+        ctx.font = '26px "Noto Sans SC"';
+        y = drawWrappedText(ctx, `和好一句话：${session.peaceLine || '-'}`, 90, 420, 900, 42);
+        y += 20;
+        drawWrappedText(ctx, `今晚行动：${session.tonightAction || '-'}`, 90, y, 900, 42);
+        const link = document.createElement('a');
+        link.href = canvas.toDataURL('image/png');
+        link.download = `repair12-card-${session.id}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        els.copyShareHint.textContent = '图卡已下载。';
+      }
+
+      function downloadSharePdf() {
+        if (!session) return;
+        const win = window.open('', '_blank', 'width=860,height=980');
+        if (!win) {
+          els.copyShareHint.textContent = '浏览器拦截了新窗口，请允许弹窗后重试。';
+          return;
+        }
+        win.document.write(`
+          <html lang="zh-CN">
+            <head>
+              <meta charset="UTF-8" />
+              <title>12分钟和好导出</title>
+              <style>
+                body { font-family: "Noto Sans SC", sans-serif; padding: 28px; color: #24303a; }
+                .box { border: 1px solid #d6dde2; border-radius: 12px; padding: 14px; margin: 10px 0; line-height: 1.6; }
+              </style>
+            </head>
+            <body>
+              <h2>12分钟和好结果卡</h2>
+              <div class="box">场景：${escapeHtml(getTemplateLabel(session.conflictType))}<br />双方：${escapeHtml(session.names.a)} / ${escapeHtml(session.names.b)}</div>
+              <div class="box"><strong>和好一句话</strong><br />${escapeHtml(session.peaceLine || '-')}</div>
+              <div class="box"><strong>今晚行动</strong><br />${escapeHtml(session.tonightAction || '-')}</div>
+              <div class="box"><strong>质量洞察</strong><br />${escapeHtml(buildQualityInsight(session))}</div>
+            </body>
+          </html>
+        `);
+        win.document.close();
+        win.focus();
+        win.print();
+      }
+
       function handleSessionHotkeys(event) {
         if (!session || !screens.session.classList.contains('active')) return;
         if (!event.altKey) return;
@@ -2141,9 +3017,23 @@
         }
       }
 
+      function handleSafetyResume() {
+        if (!session) return;
+        resolveSafetyMode();
+        session.paused = false;
+        session.totalEndsAt = nowMs() + session.totalRemaining * 1000;
+        session.stepEndsAt = nowMs() + session.stepRemaining * 1000;
+        clearStepError();
+        renderSession(true);
+        persistActiveSession();
+        syncSessionState('sync-state');
+      }
+
       els.startBtn.addEventListener('click', () => startFlow('new'));
       els.resumeBtn.addEventListener('click', () => startFlow('resume'));
       els.discardResumeBtn.addEventListener('click', discardPendingResume);
+      els.nameA.addEventListener('input', syncStartDraft);
+      els.nameB.addEventListener('input', syncStartDraft);
       els.goHistoryBtn.addEventListener('click', () => {
         clearInterval(timer);
         showScreen('result');
@@ -2155,11 +3045,30 @@
       els.pauseBtn.addEventListener('click', togglePause);
       els.nextBtn.addEventListener('click', () => nextStep());
       els.finishBtn.addEventListener('click', handleFinishClick);
+      els.safetyCooldownBtn.addEventListener('click', startSafetyCooldown);
+      els.safetyResumeBtn.addEventListener('click', handleSafetyResume);
+      els.safetyExitBtn.addEventListener('click', () => {
+        if (!session) return;
+        session.peaceLine = session.peaceLine || '当前触发安全兜底，先暂停冲突，改天再谈。';
+        session.tonightAction = session.tonightAction || '今晚不继续冲突话题，仅确认安全和边界。';
+        finishSession('safety_exit');
+      });
       els.restartBtn.addEventListener('click', () => startFlow('new'));
       els.backStartBtn.addEventListener('click', closeSessionToStart);
       els.copyShareBtn.addEventListener('click', copyShareCard);
+      els.downloadImageBtn.addEventListener('click', downloadShareImage);
+      els.downloadPdfBtn.addEventListener('click', downloadSharePdf);
+      els.downloadIcsBtn.addEventListener('click', downloadReminderIcs);
+      els.notifyBtn.addEventListener('click', scheduleBrowserReminder);
       els.resultRewriteList.addEventListener('click', handleRewriteCopy);
-      els.conflictType.addEventListener('change', updateConflictHint);
+      els.conflictType.addEventListener('change', () => {
+        updateConflictHint();
+        syncStartDraft();
+      });
+      els.conflictIntensity.addEventListener('input', () => {
+        updateIntensityDisplay();
+        syncStartDraft();
+      });
       els.privacyModeToggle.addEventListener('change', (event) => {
         settings.privacyMode = Boolean(event.target.checked);
         saveSettings();
@@ -2179,6 +3088,30 @@
         settings.autoClearHistoryOnFinish = Boolean(event.target.checked);
         saveSettings();
         updatePrivacyHint();
+      });
+      els.alertWebhook.addEventListener('change', (event) => {
+        settings.alertWebhook = String(event.target.value || '').trim();
+        saveSettings();
+        updatePrivacyHint();
+      });
+      els.joinRoomBtn.addEventListener('click', () => {
+        const room = normalizeRoom(els.collabRoom.value);
+        if (!joinCollabRoom(room)) {
+          els.collabHint.textContent = '房间号无效，请重新输入。';
+        }
+      });
+      els.createRoomBtn.addEventListener('click', () => {
+        const room = generateRoomCode();
+        joinCollabRoom(room);
+      });
+      els.copyRoomLinkBtn.addEventListener('click', async () => {
+        const room = normalizeRoom(els.collabRoom.value || collaboration.room);
+        if (!room) {
+          els.collabHint.textContent = '请先加入或创建房间。';
+          return;
+        }
+        const ok = await copyText(getRoomLink(room));
+        els.collabHint.textContent = ok ? `邀请链接已复制（房间 ${room}）。` : '复制失败，请手动复制地址栏链接。';
       });
       els.importBtn.addEventListener('click', () => {
         showImportHint('');
@@ -2222,6 +3155,16 @@
         }
       });
       document.addEventListener('keydown', handleSessionHotkeys);
+      window.addEventListener('storage', handleStorageSync);
+      window.addEventListener('error', (event) => {
+        recordClientError(event.message, event.error?.stack || '');
+        renderMonitorBox();
+      });
+      window.addEventListener('unhandledrejection', (event) => {
+        const reason = event.reason instanceof Error ? event.reason.stack || event.reason.message : String(event.reason);
+        recordClientError('Unhandled Promise Rejection', reason);
+        renderMonitorBox();
+      });
 
       document.addEventListener('visibilitychange', () => {
         if (!session || session.paused || session.status !== 'running') return;
@@ -2238,10 +3181,21 @@
         }
       });
 
+      setInterval(() => {
+        if (!collaboration.room) return;
+        sendCollabMessage('heartbeat');
+        updateCollabStatus();
+      }, COLLAB_HEARTBEAT_MS);
+
       updateConflictHint();
+      updateIntensityDisplay();
       updatePrivacyHint();
       renderHistoryLists();
       renderResumeCard();
+      renderMonitorBox();
+      setDefaultReminderTime();
+      updateCollabStatus();
+      autoJoinRoomFromUrl();
     </script>
   </body>
 </html>
