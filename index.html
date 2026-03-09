@@ -256,6 +256,79 @@
         gap: 8px;
       }
 
+      .step-guide {
+        border: 1px solid rgba(19, 111, 99, 0.28);
+        border-radius: 12px;
+        background: #f5fbf9;
+        padding: 10px;
+        margin-bottom: 10px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .step-guide-head {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .guide-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid rgba(19, 111, 99, 0.24);
+        background: #fff;
+        color: #1c4a44;
+      }
+
+      .guide-role.role-a {
+        background: #e8f6ff;
+        border-color: rgba(19, 93, 152, 0.3);
+        color: #0f5488;
+      }
+
+      .guide-role.role-b {
+        background: #fff5e8;
+        border-color: rgba(184, 101, 18, 0.28);
+        color: #8b4a0e;
+      }
+
+      .guide-role.role-both {
+        background: #eef9f3;
+        border-color: rgba(23, 102, 72, 0.25);
+        color: #176648;
+      }
+
+      .step-guide-main {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .step-guide-list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 3px;
+        color: var(--ink);
+        font-size: 13px;
+      }
+
+      .input-helper {
+        margin-top: -4px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .step-inline-tip {
+        margin-bottom: 8px;
+      }
+
       .timer-wrap {
         display: grid;
         gap: 10px;
@@ -783,6 +856,15 @@
 
             <article class="panel">
               <h3>当前步骤输入</h3>
+              <div id="stepGuide" class="step-guide">
+                <div class="step-guide-head">
+                  <span id="guideRoleBadge" class="guide-badge guide-role role-both">轮到双方</span>
+                  <span id="guideActionBadge" class="guide-badge">规则确认</span>
+                </div>
+                <p id="guideMain" class="step-guide-main">先一起读规则，然后点击下一步进入发言。</p>
+                <ul id="guideChecklist" class="step-guide-list"></ul>
+                <small id="guideQuickHint" class="muted"></small>
+              </div>
               <div id="stepForm"></div>
               <div id="qualityWrap" class="quality-box hidden">
                 <small class="muted">本步骤自评（可用于生成改进建议）</small>
@@ -1034,6 +1116,12 @@
         nextBtn: document.getElementById('nextBtn'),
         finishBtn: document.getElementById('finishBtn'),
         stepError: document.getElementById('stepError'),
+        stepGuide: document.getElementById('stepGuide'),
+        guideRoleBadge: document.getElementById('guideRoleBadge'),
+        guideActionBadge: document.getElementById('guideActionBadge'),
+        guideMain: document.getElementById('guideMain'),
+        guideChecklist: document.getElementById('guideChecklist'),
+        guideQuickHint: document.getElementById('guideQuickHint'),
         safetyPanel: document.getElementById('safetyPanel'),
         safetyReason: document.getElementById('safetyReason'),
         safetyCooldownBtn: document.getElementById('safetyCooldownBtn'),
@@ -1738,6 +1826,101 @@
         }).join('');
       }
 
+      function getStepGuide(targetSession) {
+        if (!targetSession) return null;
+        const { a, b } = targetSession.names;
+        if (targetSession.inCooldown) {
+          return {
+            roleText: '轮到双方',
+            roleClass: 'role-both',
+            actionText: '先降温',
+            mainText: '先把语速降下来，再继续输入内容。',
+            checks: ['深呼吸 6 次', '各说一句“我想解决问题，不想赢你”', '确认边界：不辱骂、不威胁、不离场'],
+            quickHint: '可等待 60 秒自动结束，也可点击“下一步”提前进入正式流程。'
+          };
+        }
+
+        const guides = {
+          0: {
+            roleText: '轮到双方',
+            roleClass: 'role-both',
+            actionText: '规则确认',
+            mainText: '先一起读规则，再进入发言。',
+            checks: ['只聊本次事件', '不打断对方', '不用“你总是/你从不”这类词'],
+            quickHint: '读完后直接点“下一步”。'
+          },
+          1: {
+            roleText: `轮到 ${a}`,
+            roleClass: 'role-a',
+            actionText: 'A 说事实',
+            mainText: `${a}先说可观察到的事实，不解释对方动机。`,
+            checks: ['至少 8 个字', '包含时间/行为/结果', '不用评判词（比如“你故意”）'],
+            quickHint: '写完后先打分，再点“下一步”。'
+          },
+          2: {
+            roleText: `轮到 ${b}`,
+            roleClass: 'role-b',
+            actionText: 'B 做复述',
+            mainText: `${b}先复述 ${a} 的重点，不辩解。`,
+            checks: ['至少 6 个字', '一句话即可', '可用句式：我听到你在意的是...'],
+            quickHint: '目标是让对方感觉“你真的听懂了”。'
+          },
+          3: {
+            roleText: `轮到 ${b}`,
+            roleClass: 'role-b',
+            actionText: 'B 说事实',
+            mainText: `${b}说明自己当时发生了什么，聚焦事实。`,
+            checks: ['至少 8 个字', '写清场景和影响', '不评价对方人格'],
+            quickHint: '写可验证信息，不写“你想太多”。'
+          },
+          4: {
+            roleText: `轮到 ${a}`,
+            roleClass: 'role-a',
+            actionText: 'A 做复述',
+            mainText: `${a}复述 ${b} 的重点，先确认再回应。`,
+            checks: ['至少 6 个字', '一句话概括重点', '可用句式：我听到你的意思是...'],
+            quickHint: '先“听懂”，再进入后续步骤。'
+          },
+          5: {
+            roleText: '轮到双方',
+            roleClass: 'role-both',
+            actionText: '选感受与需要',
+            mainText: '双方都要各选 1 个感受和 1 个需要。',
+            checks: ['A 至少选 2 个词（感受+需要）', 'B 至少选 2 个词（感受+需要）', '先表达自己，不替对方下定义'],
+            quickHint: '这一步不是争对错，而是澄清真实需求。'
+          },
+          6: {
+            roleText: '轮到双方',
+            roleClass: 'role-both',
+            actionText: '提出请求',
+            mainText: '先写 A 的请求，再写 B 的请求，动作要可执行。',
+            checks: ['两边都至少 6 个字', '包含具体动作/频率/触发场景', '避免“你以后别这样”这种空话'],
+            quickHint: '请求越具体，今晚越容易落地。'
+          },
+          7: {
+            roleText: '轮到双方',
+            roleClass: 'role-both',
+            actionText: '和好收尾',
+            mainText: '生成并确认一句和好承诺 + 今晚行动。',
+            checks: ['和好一句话至少 8 字', '今晚行动至少 6 字', '行动必须今天就能完成'],
+            quickHint: '收尾要“短、具体、可完成”。'
+          }
+        };
+        return guides[targetSession.stepIndex] || guides[0];
+      }
+
+      function renderStepGuide() {
+        if (!session || !els.stepGuide) return;
+        const guide = getStepGuide(session);
+        if (!guide) return;
+        els.guideRoleBadge.className = `guide-badge guide-role ${guide.roleClass}`;
+        els.guideRoleBadge.textContent = guide.roleText;
+        els.guideActionBadge.textContent = guide.actionText;
+        els.guideMain.textContent = guide.mainText;
+        els.guideChecklist.innerHTML = guide.checks.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+        els.guideQuickHint.textContent = guide.quickHint || '';
+      }
+
       function renderQualityControls() {
         if (!session || session.stepIndex === 0 || session.inCooldown) {
           els.qualityWrap.classList.add('hidden');
@@ -1782,6 +1965,7 @@
         }
         renderClockOnly();
         renderTimeline();
+        renderStepGuide();
         if (session.inSafetyMode) {
           els.safetyPanel.classList.remove('hidden');
           els.safetyReason.textContent = session.safetyReason || '已触发安全兜底。请先降温后再继续。';
@@ -2221,9 +2405,10 @@
         if (!session) return;
         const { a, b } = session.names;
         const index = session.stepIndex;
-        const byTextarea = (field, label, value, placeholder) => `
+        const byTextarea = (field, label, value, placeholder, helper = '') => `
           <div class="form-row">
             <label>${label}</label>
+            ${helper ? `<small class="input-helper">${helper}</small>` : ''}
             <textarea data-bind="${field}" placeholder="${placeholder}">${escapeHtml(value || '')}</textarea>
           </div>
         `;
@@ -2250,13 +2435,37 @@
             </div>
           `;
         } else if (index === 1) {
-          html = byTextarea('factA', `${a}：这次发生了什么？`, session.factA, getFieldPlaceholder('factA', '例：昨晚 9 点我们约好通话，你在 10 点后才回复...'));
+          html = byTextarea(
+            'factA',
+            `${a}现在发言：只写事实（不评判）`,
+            session.factA,
+            getFieldPlaceholder('factA', '例：昨晚 9 点我们约好通话，你在 10 点后才回复...'),
+            '建议结构：时间 + 行为 + 影响。不要写“你故意/你总是”。'
+          );
         } else if (index === 2) {
-          html = byTextarea('reflectB', `${b}：我听到的是...`, session.reflectB, getFieldPlaceholder('reflectB', '例：你在意的是我晚回复，而且没有提前告知。'));
+          html = byTextarea(
+            'reflectB',
+            `${b}现在复述：我听到的是...`,
+            session.reflectB,
+            getFieldPlaceholder('reflectB', '例：你在意的是我晚回复，而且没有提前告知。'),
+            `先复述 ${a} 的重点，不解释自己。`
+          );
         } else if (index === 3) {
-          html = byTextarea('factB', `${b}：这次发生了什么？`, session.factB, getFieldPlaceholder('factB', '例：我当时在加班，手机静音，结束后才看到消息...'));
+          html = byTextarea(
+            'factB',
+            `${b}现在发言：只写事实（不评判）`,
+            session.factB,
+            getFieldPlaceholder('factB', '例：我当时在加班，手机静音，结束后才看到消息...'),
+            '只描述可观察到的信息，避免“你想太多”这类判断。'
+          );
         } else if (index === 4) {
-          html = byTextarea('reflectA', `${a}：我听到的是...`, session.reflectA, getFieldPlaceholder('reflectA', '例：你不是故意忽略我，而是当时没法及时回应。'));
+          html = byTextarea(
+            'reflectA',
+            `${a}现在复述：我听到的是...`,
+            session.reflectA,
+            getFieldPlaceholder('reflectA', '例：你不是故意忽略我，而是当时没法及时回应。'),
+            `先确认 ${b} 的难处，再表达你的感受。`
+          );
         } else if (index === 5) {
           html = `
             <div class="double-col">
@@ -2274,13 +2483,40 @@
           `;
         } else if (index === 6) {
           html = `
-            ${byTextarea('requestA', `${a} 的请求`, session.requestA, getFieldPlaceholder('requestA', '例：如果会晚 15 分钟以上，请提前发一句消息。'))}
-            ${byTextarea('requestB', `${b} 的请求`, session.requestB, getFieldPlaceholder('requestB', '例：如果我没及时回，可以先发“你方便时回我”。'))}
+            <div class="result-card step-inline-tip">
+              填写顺序：先 ${a} 的请求，再 ${b} 的请求。请求要写成“具体动作 + 触发场景”。
+            </div>
+            ${byTextarea(
+              'requestA',
+              `${a} 的请求（先写）`,
+              session.requestA,
+              getFieldPlaceholder('requestA', '例：如果会晚 15 分钟以上，请提前发一句消息。'),
+              '句式建议：当[场景]发生时，我希望你[具体动作]。'
+            )}
+            ${byTextarea(
+              'requestB',
+              `${b} 的请求（再写）`,
+              session.requestB,
+              getFieldPlaceholder('requestB', '例：如果我没及时回，可以先发“你方便时回我”。'),
+              '动作越具体，执行成功率越高。'
+            )}
           `;
         } else {
           html = `
-            ${byTextarea('peaceLine', '和好一句话', session.peaceLine || buildPeaceLine(), '自动生成后可手动修改')}
-            ${byTextarea('tonightAction', '今晚行动', session.tonightAction || suggestTonightAction(), '今晚就能完成的一件事')}
+            ${byTextarea(
+              'peaceLine',
+              '和好一句话（双方都认可）',
+              session.peaceLine || buildPeaceLine(),
+              '自动生成后可手动修改',
+              '一句话即可，重点是确认“我们要一起解决问题”。'
+            )}
+            ${byTextarea(
+              'tonightAction',
+              '今晚行动（今天就能完成）',
+              session.tonightAction || suggestTonightAction(),
+              '今晚就能完成的一件事',
+              '请写可执行动作，例如“23:00 前互发确认消息”。'
+            )}
             <div class="actions">
               <button type="button" id="genLineBtn" class="btn-plain">重新生成一句话</button>
             </div>
