@@ -58,3 +58,10 @@ npm test
 1. 将本目录推送到 GitHub 仓库。
 2. 在 Render 里使用 Blueprint，读取 `render.yaml`。
 3. 应用后会自动创建一个 Static Web Service。
+
+## GitHub Positioning
+
+- Suggested description: `Conflict repair web app focused on a 12-minute guided reconciliation flow.`
+- Suggested topics: `relationship-tool`, `guided-flow`, `static-site`, `html`, `javascript`, `playwright`
+- Metadata notes: see [`docs/repo-metadata.md`](docs/repo-metadata.md)
+

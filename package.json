@@ -11,16 +11,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lastxuan4396/ohcard.git"
+    "url": "git+https://github.com/lastxuan4396/12-.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/lastxuan4396/ohcard/issues"
+    "url": "https://github.com/lastxuan4396/12-/issues"
   },
-  "homepage": "https://github.com/lastxuan4396/ohcard#readme",
+  "homepage": "https://github.com/lastxuan4396/12-#readme",
   "devDependencies": {
     "playwright": "^1.58.2"
   }
